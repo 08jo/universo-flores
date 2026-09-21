@@ -52,7 +52,7 @@ const CONFIG = {
     "🌻 Con tus palabras y tu escucha, haces mucho bien"
 ],
     fotos: [],
-    musica: "assets/musica.mp4"
+    musica: "assets/musica.mp3"
 };
 
 /* ---------- TÍTULO ---------- */
