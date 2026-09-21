@@ -1,0 +1,185 @@
+/* =========================================================
+   UNIVERSO DE FLORES AMARILLAS — estilos
+   ========================================================= */
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html, body {
+    height: 100%;
+    overflow: hidden;
+    background: #000;
+    font-family: 'Cormorant Garamond', serif;
+    color: #fff;
+    -webkit-tap-highlight-color: transparent;
+}
+
+/* ---------- Canvas ---------- */
+#c {
+    display: block;
+    width: 100vw;
+    height: 100vh;
+    cursor: grab;
+    touch-action: none;
+}
+#c:active { cursor: grabbing; }
+
+/* ---------- Título fijo ---------- */
+#main-title {
+    position: fixed;
+    top: 22px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-family: 'Indie Flower', cursive;
+    font-size: clamp(1.05rem, 3vw, 1.8rem);
+    font-weight: 400;
+    letter-spacing: 2px;
+    text-align: center;
+    color: #ffe066;
+    text-shadow:
+        0 0 14px rgba(255, 210, 60, 0.9),
+        0 0 34px rgba(255, 180, 0, 0.55);
+    pointer-events: none;
+    z-index: 10;
+    padding: 0 20px;
+    animation: fadeDown 1.6s ease both;
+}
+
+@keyframes fadeDown {
+    from { opacity: 0; transform: translate(-50%, -18px); }
+    to   { opacity: 1; transform: translate(-50%, 0); }
+}
+
+/* ---------- Pantalla de inicio ---------- */
+#start-screen {
+    position: fixed;
+    inset: 0;
+    z-index: 20;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 24px;
+    padding: 0 24px;
+    background:
+        radial-gradient(ellipse at center,
+            rgba(28, 22, 0, 0.88) 0%,
+            rgba(0, 0, 0, 0.97) 70%);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    cursor: pointer;
+    transition: opacity 0.9s ease, visibility 0.9s;
+    text-align: center;
+}
+
+#start-screen.hidden {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+}
+
+#start-flower {
+    font-size: clamp(70px, 13vw, 110px);
+    filter: drop-shadow(0 0 30px rgba(255, 210, 60, 1));
+    animation: floatFlower 3.6s ease-in-out infinite;
+}
+
+@keyframes floatFlower {
+    0%, 100% { transform: translateY(0)     rotate(-4deg); }
+    50%      { transform: translateY(-12px) rotate(4deg);  }
+}
+
+#start-text {
+    font-family: 'Indie Flower', cursive;
+    font-size: clamp(1.1rem, 2.6vw, 1.5rem);
+    color: #ffe066;
+    letter-spacing: 1px;
+    line-height: 1.6;
+    max-width: 480px;
+    text-shadow: 0 0 18px rgba(255, 210, 60, 0.75);
+    opacity: 0;
+    animation: fadeUp 1.4s ease 0.4s forwards;
+}
+
+#start-button {
+    margin-top: 8px;
+    font-family: 'Indie Flower', cursive;
+    font-size: clamp(0.8rem, 1.7vw, 0.95rem);
+    color: #fff2b0;
+    letter-spacing: 4px;
+    text-transform: uppercase;
+    padding: 12px 28px;
+    border: 1.5px solid rgba(255, 214, 74, 0.55);
+    border-radius: 999px;
+    background: rgba(255, 214, 74, 0.06);
+    box-shadow:
+        0 0 22px rgba(255, 210, 60, 0.35),
+        inset 0 0 14px rgba(255, 210, 60, 0.12);
+    animation: pulseButton 2.4s ease-in-out infinite;
+    transition: opacity 0.4s ease;
+}
+
+/* Estado "cargando" */
+#start-button.loading {
+    opacity: 0.55;
+    animation: none;
+}
+
+/* Estado "listo" */
+#start-button.ready {
+    opacity: 1;
+    animation: pulseButton 2.4s ease-in-out infinite;
+}
+
+@keyframes pulseButton {
+    0%, 100% {
+        transform: scale(1);
+        box-shadow:
+            0 0 22px rgba(255, 210, 60, 0.35),
+            inset 0 0 14px rgba(255, 210, 60, 0.12);
+    }
+    50% {
+        transform: scale(1.05);
+        box-shadow:
+            0 0 34px rgba(255, 210, 60, 0.65),
+            inset 0 0 20px rgba(255, 210, 60, 0.2);
+    }
+}
+
+@keyframes fadeUp {
+    from { opacity: 0; transform: translateY(14px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ---------- Responsive ---------- */
+@media (max-width: 600px) {
+    #main-title {
+        top: 14px;
+        letter-spacing: 1px;
+    }
+    #start-screen {
+        gap: 18px;
+        padding: 0 18px;
+    }
+    #start-text {
+        line-height: 1.5;
+    }
+}
+
+@media (max-width: 380px) {
+    #start-button {
+        padding: 10px 22px;
+        letter-spacing: 3px;
+    }
+}
+
+#start-note {
+    font-family: 'Indie Flower', cursive;
+    font-size: clamp(0.7rem, 1.5vw, 0.9rem);
+    color: #ffe066;
+    opacity: 0.7;
+    letter-spacing: 1px;
+    text-shadow: 0 0 10px rgba(255, 210, 60, 0.7);
+    max-width: 420px;
+    line-height: 1.5;
+    animation: fadeUp 1.4s ease 0.8s both;
+}
