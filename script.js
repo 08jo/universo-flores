@@ -89,7 +89,7 @@ let starting = false;
 
 /* ---------- ESTADO INICIAL DEL BOTÓN ---------- */
 
-startButton.textContent = "Cargando música...";
+startButton.textContent = "Cargando...";
 startButton.classList.add('loading');
 
 
@@ -165,6 +165,7 @@ async function preloadAndDecode() {
     try {
 
         console.log("🎵 Preparando música...");
+
 
         /*
          * Crear AudioContext.
@@ -268,13 +269,13 @@ async function preloadAndDecode() {
         else {
 
             /*
-             * Mostrar un mensaje de error temporal.
+             * Mostrar estado de carga.
              */
 
-            startButton.textContent =
-                "Reintentando cargar música...";
+            startButton.textContent = "Cargando...";
 
             startButton.classList.remove('ready');
+
 
             /*
              * Intentar cargar nuevamente el audio HTML.
@@ -460,6 +461,7 @@ async function playFromElement() {
 
         audio.volume = VOLUMEN_FINAL;
 
+
         /*
          * Comenzamos desde el principio.
          */
@@ -470,8 +472,10 @@ async function playFromElement() {
         const promise = audio.play();
 
 
-        if (promise &&
-            typeof promise.then === 'function') {
+        if (
+            promise &&
+            typeof promise.then === 'function'
+        ) {
 
             await promise;
 
