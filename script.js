@@ -68,17 +68,17 @@ const VOLUMEN_FINAL = 0.5;
 const audio        = document.getElementById('audio');
 const startButton  = document.getElementById('start-button');
 
-/* Referencias para el motor de audio */
 const AC = window.AudioContext || window.webkitAudioContext;
-let audioCtx        = null;
-let masterGain      = null;
-let audioBuffer     = null;
-let sourceNode      = null;
-let isPlaying       = false;
-let audioReady      = false;
+let audioCtx     = null;
+let masterGain   = null;
+let audioBuffer  = null;
+let sourceNode   = null;
+let audioReady   = false;
+let unlocked     = false;
 
-/* ---------- 1) <link rel=preload> para empezar a bajar el MP3 cuanto antes ---------- */
+/* ---------- 1) <link rel=preload> por si el HTML no lo tiene ---------- */
 (function preloadLink() {
+    if (document.querySelector('link[rel="preload"][as="audio"]')) return;
     try {
         const link = document.createElement('link');
         link.rel         = 'preload';
@@ -90,8 +90,7 @@ let audioReady      = false;
     } catch (e) {}
 })();
 
-/* ---------- 2) Configurar el <audio> como fallback ---------- */
-audio.querySelector('source').src = CONFIG.musica;
+/* ---------- 2) Fallback <audio> ---------- */
 audio.preload = 'auto';
 audio.setAttribute('playsinline', '');
 audio.setAttribute('webkit-playsinline', '');
@@ -132,16 +131,14 @@ async function preloadAndDecode() {
 }
 preloadAndDecode();
 
-/* Fallback de tiempo */
+/* Fallback: si tarda más de 2.5 s, habilitar botón igual */
 setTimeout(() => markReady(), 2500);
 
-/* ---------- 5) Reproducción instantánea con Web Audio ---------- */
+/* ---------- 5) Reproducción instantánea ---------- */
 function playFromBuffer() {
     if (!audioCtx || !audioBuffer) return false;
 
-    if (audioCtx.state === 'suspended') {
-        audioCtx.resume();
-    }
+    if (audioCtx.state === 'suspended') audioCtx.resume();
 
     if (sourceNode) {
         try { sourceNode.stop(); } catch (e) {}
@@ -159,11 +156,9 @@ function playFromBuffer() {
     masterGain.gain.linearRampToValueAtTime(VOLUMEN_FINAL, now + 0.6);
 
     sourceNode.start(0);
-    isPlaying = true;
     return true;
 }
 
-/* Fallback <audio> */
 function playFromElement() {
     audio.muted  = false;
     audio.volume = VOLUMEN_FINAL;
@@ -173,9 +168,7 @@ function playFromElement() {
     }
 }
 
-/* ---------- 6) Desbloqueo global ---------- */
-let unlocked = false;
-
+/* ---------- 6) Desbloqueo global (primer gesto en cualquier parte) ---------- */
 function unlockAndPlay() {
     if (unlocked) return;
     unlocked = true;
@@ -201,7 +194,7 @@ document.addEventListener('touchstart', unlockAndPlay, { once: true, passive: tr
 document.addEventListener('click',      unlockAndPlay, { once: true });
 document.addEventListener('keydown',    unlockAndPlay, { once: true });
 
-/* ---------- 7) Arranque desde la pantalla de inicio ---------- */
+/* ---------- 7) Pantalla de inicio ---------- */
 const startScreen = document.getElementById('start-screen');
 
 function startExperience() {
@@ -255,7 +248,7 @@ let rotY = 0;
     })));
 })();
 
-/* ---------- NÚCLEO CENTRAL ---------- */
+/* ---------- NÚCLEO ---------- */
 const coreMat = new THREE.MeshPhongMaterial({
     color: 0x030303, transparent: true, opacity: 0.92, shininess: 30
 });
@@ -268,7 +261,7 @@ const pointLight = new THREE.PointLight(0xffd54a, 2, 800);
 pointLight.position.set(120, 100, 120);
 scene.add(pointLight);
 
-/* ---------- GLOW EXTERIOR ---------- */
+/* ---------- GLOW ---------- */
 const GLOW_BASE = 360;
 function makeGlow(size = 768, c1 = '255,235,130', c2 = '255,180,0') {
     const c = document.createElement('canvas');
@@ -288,7 +281,7 @@ const glow = new THREE.Sprite(new THREE.SpriteMaterial({
 glow.scale.set(GLOW_BASE, GLOW_BASE, 1);
 scene.add(glow);
 
-/* ---------- ANILLO estilo Saturno ---------- */
+/* ---------- ANILLO ---------- */
 function ringTexture(size = 1024) {
     const c = document.createElement('canvas');
     c.width = c.height = size;
@@ -339,7 +332,7 @@ const ring = new THREE.Mesh(
 ring.rotation.x = Math.PI / 2;
 scene.add(ring);
 
-/* ---------- FRASES ALREDEDOR ---------- */
+/* ---------- FRASES ---------- */
 const frasesBase = (Array.isArray(CONFIG.frases) && CONFIG.frases.length)
     ? CONFIG.frases
     : ["🌻"];
@@ -499,7 +492,7 @@ addEventListener('wheel', (e) => {
     targetDist  = Math.max(160, Math.min(600, targetDist));
 }, { passive: true });
 
-/* Zoom con pellizco */
+/* Zoom pellizco */
 let pinch = 0;
 addEventListener('touchmove', (e) => {
     if (e.touches && e.touches.length === 2) {
