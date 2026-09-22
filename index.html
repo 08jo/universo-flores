@@ -8,13 +8,19 @@
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+
     <link href="https://fonts.googleapis.com/css2?family=Indie+Flower&family=Cormorant+Garamond:ital,wght@0,300;0,500;1,400&display=swap" rel="stylesheet">
 
-    <!-- Preload del audio: empieza a bajar el MP3 ANTES de que cargue el JS -->
-    <link rel="preload" href="assets/musica.mp3" as="audio" type="audio/mpeg" crossorigin="anonymous">
+    <!-- Empieza a cargar la música mientras se carga la página -->
+    <link rel="preload"
+          href="assets/musica.mp3"
+          as="audio"
+          type="audio/mpeg"
+          crossorigin="anonymous">
 
     <link rel="stylesheet" href="style.css">
 </head>
+
 <body>
 
     <canvas id="c"></canvas>
@@ -22,17 +28,40 @@
     <h1 id="main-title">Un universo hecho para ti 🌻</h1>
 
     <div id="start-screen">
+
         <div id="start-flower">🌻</div>
-        <div id="start-text">Hay personas que merecen<br>un universo entero</div>
-        <div id="start-note">(Doña Gabriela, esto no es gratis, me tiene que pagar 🤣)</div>
-        <div id="start-button">Cargando...</div>
+
+        <div id="start-text">
+            Hay personas que merecen<br>
+            un universo entero
+        </div>
+
+        <div id="start-note">
+            (Doña Gabriela, esto no es gratis, me tiene que pagar 🤣)
+        </div>
+
+        <div id="start-button">
+            Cargando música...
+        </div>
+
     </div>
 
-    <audio id="audio" loop preload="auto" playsinline webkit-playsinline crossorigin="anonymous">
+    <!-- Música -->
+    <audio id="audio"
+           loop
+           preload="auto"
+           playsinline
+           webkit-playsinline
+           crossorigin="anonymous">
+
         <source src="assets/musica.mp3" type="audio/mpeg">
+
     </audio>
 
+    <!-- Three.js -->
     <script src="https://cdn.jsdelivr.net/npm/three@0.148.0/build/three.min.js"></script>
+
+    <!-- Tu JavaScript -->
     <script src="script.js"></script>
 
 </body>
