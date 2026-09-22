@@ -4,53 +4,53 @@
    - 150 frases flotando en esfera 3D
    - Estrellas de fondo
    - Control: arrastrar, rueda, pellizco
-   - Audio con precarga: suena al instante al tocar
+   - Audio con precarga mejorada para móvil
    ========================================================= */
 
 /* ---------- CONFIGURACIÓN ---------- */
 const CONFIG = {
     titulo: "Un universo hecho para ti 🌻",
-   frases: [
-    // --- Originales ---
-    "🌻 Eres de esas personas que dejan huella",
-    "🌻 Tienes algo especial que se nota",
-    "🌻 Brillas sin darte cuenta",
-    "🌻 Tu forma de ser es un regalo",
-    "🌻 El mundo es mejor contigo en él",
-    "🌻 Tienes un corazón enorme",
-    "🌻 Eres luz para quien te rodea",
-    "🌻 Haces que todo sea más bonito",
-    "🌻 Tu presencia cambia los lugares",
-    "🌻 Eres de las personas que suman",
-    "🌻 Tienes una energía única",
-    "🌻 Se nota cuando alguien es buena persona",
-    "🌻 Transmites calma y alegría a la vez",
-    "🌻 Tu risa contagia a cualquiera",
-    "🌻 Eres fuerte sin darte cuenta",
-    "🌻 Tienes una forma de querer muy linda",
-    "🌻 Eres ejemplo de muchas cosas buenas",
-    "🌻 Tu esencia es difícil de encontrar",
-    "🌻 Nadie es como tú, y eso es un halago",
-    "🌻 Iluminas sin hacer ruido",
-    "🌻 Eres de las que hacen bien con solo estar",
-    "🌻 Tu manera de ver la vida inspira",
-    "🌻 Tienes una sensibilidad hermosa",
-    "🌻 Eres admirable en más de una forma",
-    "🌻 Haces fácil lo que otros ven difícil",
-    "🌻 Tu bondad se nota en los detalles",
-    "🌻 Eres de las personas que valen la pena",
-    "🌻 Dejas cosas buenas por donde pasas",
-    "🌻 Tienes un brillo que no se apaga",
-    "🌻 Eres increíble tal como eres",
-    "🌻 Lo bueno de ti no cabe en palabras",
-    "🌻 Eres de las que uno recuerda siempre",
-    "🌻 Tu forma de estar es un abrazo",
-    "🌻 Mereces todo lo bonito que das",
-    "🌻 Eres una de esas personas que inspiran",
-    "🌻 Sabes decir lo que uno necesita oír",
-    "🌻 Tus palabras llegan justo cuando hacen falta", 
-    "🌻 Con tus palabras y tu escucha, haces mucho bien"
-],
+    frases: [
+        // --- Originales ---
+        "🌻 Eres de esas personas que dejan huella",
+        "🌻 Tienes algo especial que se nota",
+        "🌻 Brillas sin darte cuenta",
+        "🌻 Tu forma de ser es un regalo",
+        "🌻 El mundo es mejor contigo en él",
+        "🌻 Tienes un corazón enorme",
+        "🌻 Eres luz para quien te rodea",
+        "🌻 Haces que todo sea más bonito",
+        "🌻 Tu presencia cambia los lugares",
+        "🌻 Eres de las personas que suman",
+        "🌻 Tienes una energía única",
+        "🌻 Se nota cuando alguien es buena persona",
+        "🌻 Transmites calma y alegría a la vez",
+        "🌻 Tu risa contagia a cualquiera",
+        "🌻 Eres fuerte sin darte cuenta",
+        "🌻 Tienes una forma de querer muy linda",
+        "🌻 Eres ejemplo de muchas cosas buenas",
+        "🌻 Tu esencia es difícil de encontrar",
+        "🌻 Nadie es como tú, y eso es un halago",
+        "🌻 Iluminas sin hacer ruido",
+        "🌻 Eres de las que hacen bien con solo estar",
+        "🌻 Tu manera de ver la vida inspira",
+        "🌻 Tienes una sensibilidad hermosa",
+        "🌻 Eres admirable en más de una forma",
+        "🌻 Haces fácil lo que otros ven difícil",
+        "🌻 Tu bondad se nota en los detalles",
+        "🌻 Eres de las personas que valen la pena",
+        "🌻 Dejas cosas buenas por donde pasas",
+        "🌻 Tienes un brillo que no se apaga",
+        "🌻 Eres increíble tal como eres",
+        "🌻 Lo bueno de ti no cabe en palabras",
+        "🌻 Eres de las que uno recuerda siempre",
+        "🌻 Tu forma de estar es un abrazo",
+        "🌻 Mereces todo lo bonito que das",
+        "🌻 Eres una de esas personas que inspiran",
+        "🌻 Sabes decir lo que uno necesita oír",
+        "🌻 Tus palabras llegan justo cuando hacen falta",
+        "🌻 Con tus palabras y tu escucha, haces mucho bien"
+    ],
     fotos: [],
     musica: "assets/musica.mp3"
 };
@@ -58,18 +58,23 @@ const CONFIG = {
 /* ---------- TÍTULO ---------- */
 document.getElementById('main-title').textContent = CONFIG.titulo;
 
-/* ---------- AUDIO CON PRECARGA ---------- */
+/* ---------- AUDIO CON PRECARGA MEJORADA ---------- */
 const audio = document.getElementById('audio');
 audio.querySelector('source').src = CONFIG.musica;
 audio.preload = 'auto';
+audio.setAttribute('playsinline', '');
+audio.setAttribute('webkit-playsinline', '');
 audio.load();
+
+/* Forzar descarga completa en segundo plano */
+fetch(CONFIG.musica).catch(() => {});
 
 const startButton = document.getElementById('start-button');
 const VOLUMEN_FINAL = 0.5;   // 0.3 suave, 0.5 medio, 0.8 fuerte
 let audioReady = false;
 
-/* Mientras carga: "Cargando..." */
-startButton.textContent = 'Cargando...';
+/* Mientras carga: "Preparando..." */
+startButton.textContent = 'Preparando...';
 startButton.classList.add('loading');
 
 /* Cuando el navegador tiene suficiente audio listo */
@@ -81,7 +86,7 @@ audio.addEventListener('canplaythrough', () => {
     startButton.classList.add('ready');
 });
 
-/* Fallback: si después de 4s no cargó, permitir tocar igual */
+/* Fallback: si después de 5s no cargó, permitir tocar igual */
 setTimeout(() => {
     if (!audioReady) {
         audioReady = true;
@@ -89,17 +94,32 @@ setTimeout(() => {
         startButton.classList.remove('loading');
         startButton.classList.add('ready');
     }
-}, 4000);
+}, 5000);
 
-/* Truco: reproducir en silencio para "desbloquear" el audio */
+/* Truco mejorado para móvil: preparar el audio silenciosamente */
 audio.volume = 0;
+audio.muted = true;
+
+const unlockAudio = () => {
+    audio.muted = false;
+    audio.volume = VOLUMEN_FINAL;
+    audio.play().catch(() => {});
+};
+
+/* Intento 1: reproducir silenciado al cargar (funciona en algunos móviles) */
 audio.play().then(() => {
     audio.pause();
     audio.currentTime = 0;
     audio.volume = VOLUMEN_FINAL;
+    audio.muted = false;
 }).catch(() => {
     audio.volume = VOLUMEN_FINAL;
+    audio.muted = false;
 });
+
+/* Intento 2: desbloquear al primer toque en CUALQUIER parte de la pantalla */
+document.addEventListener('touchstart', unlockAudio, { once: true, passive: true });
+document.addEventListener('click', unlockAudio, { once: true });
 
 /* ---------- ESCENA ---------- */
 const canvas   = document.getElementById('c');
@@ -437,13 +457,12 @@ tick();
 const startScreen = document.getElementById('start-screen');
 
 function startExperience() {
-    // No dejar tocar si el audio aún no está listo
     if (!audioReady) return;
 
     startScreen.classList.add('hidden');
     setTimeout(() => { startScreen.style.display = 'none'; }, 900);
 
-    // Reproducir (ya está precargado → suena al instante)
+    audio.muted = false;
     audio.volume = VOLUMEN_FINAL;
     audio.play().catch(() => {});
 }
