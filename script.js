@@ -75,15 +75,8 @@ const audio = document.getElementById('audio');
 const startButton = document.getElementById('start-button');
 const startScreen = document.getElementById('start-screen');
 
-let audioReady = false;
 let unlocked = false;
 let starting = false;
-
-
-/* ---------- ESTADO INICIAL DEL BOTÓN ---------- */
-
-startButton.textContent = "Cargando...";
-startButton.classList.add('loading');
 
 
 /* =========================================================
@@ -98,75 +91,20 @@ audio.volume = VOLUMEN_FINAL;
 audio.muted = false;
 
 
-/*
- * El navegador comienza a cargar el MP3 directamente.
- * No se utiliza AudioContext.
- * No se utiliza fetch().
- * No se utiliza decodeAudioData().
- */
-
-audio.addEventListener('canplay', () => {
-    markReady();
-}, { once: true });
-
-
-audio.addEventListener('error', () => {
-
-    console.error(
-        '❌ Error cargando la música:',
-        audio.error
-    );
-
-    startButton.textContent = 'Cargando...';
-
-    startButton.classList.remove('ready');
-
-    startButton.classList.add('loading');
-
-});
-
-
-audio.load();
-
-
 /* =========================================================
-   MARCAR AUDIO COMO LISTO
+   BOTÓN DE INICIO
    ========================================================= */
 
-function markReady() {
-
-    if (audioReady) {
-        return;
-    }
-
-    audioReady = true;
-
-    startButton.textContent = "🌻 Toca para entrar";
-
-    startButton.classList.remove('loading');
-
-    startButton.classList.add('ready');
-
-    console.log(
-        '✅ Música lista para reproducirse'
-    );
-
-}
-
-
 /*
- * Si el navegador ya tenía suficiente audio cargado,
- * lo detectamos inmediatamente.
+ * Ya no se muestra "Cargando música...".
+ * El botón queda disponible inmediatamente.
  */
 
-if (
-    audio.readyState >=
-    HTMLMediaElement.HAVE_FUTURE_DATA
-) {
+startButton.textContent = "🌻 Toca para entrar";
 
-    markReady();
+startButton.classList.remove('loading');
 
-}
+startButton.classList.add('ready');
 
 
 /* =========================================================
@@ -181,11 +119,9 @@ async function playFromElement() {
 
         audio.volume = VOLUMEN_FINAL;
 
-        audio.currentTime = 0;
-
         /*
-         * Esta es ahora la ÚNICA forma de reproducir
-         * la música.
+         * La reproducción comienza directamente
+         * como consecuencia de la interacción del usuario.
          */
 
         const promise = audio.play();
@@ -225,7 +161,11 @@ async function playFromElement() {
 
 async function startExperience() {
 
-    if (starting) {
+    /*
+     * Evita ejecuciones dobles.
+     */
+
+    if (starting || unlocked) {
         return;
     }
 
@@ -233,28 +173,20 @@ async function startExperience() {
 
 
     /*
-     * IMPORTANTE:
-     * No esperamos a que el MP3 termine de descargarse.
-     *
-     * El navegador se encarga del buffering directamente
-     * mediante el elemento <audio>.
+     * AQUÍ SE EJECUTA DIRECTAMENTE audio.play()
+     * después del clic del usuario.
      */
 
     const reproduced =
         await playFromElement();
 
 
+    /*
+     * Si el navegador bloquea el audio,
+     * no continuamos con la experiencia.
+     */
+
     if (!reproduced) {
-
-        console.warn(
-            '⚠️ No se pudo iniciar la música.'
-        );
-
-        startScreen.style.display = 'flex';
-
-        startScreen.classList.remove(
-            'hidden'
-        );
 
         starting = false;
 
@@ -266,6 +198,13 @@ async function startExperience() {
     /*
      * La música comenzó correctamente.
      */
+
+    unlocked = true;
+
+
+    /* =====================================================
+       OCULTAR PANTALLA DE INICIO
+       ===================================================== */
 
     startScreen.classList.add(
         'hidden'
@@ -279,15 +218,13 @@ async function startExperience() {
     }, 900);
 
 
-    unlocked = true;
-
     starting = false;
 
 }
 
 
 /* =========================================================
-   EVENTOS DEL BOTÓN DE INICIO
+   EVENTO CLICK
    ========================================================= */
 
 startScreen.addEventListener(
@@ -295,6 +232,10 @@ startScreen.addEventListener(
     startExperience
 );
 
+
+/* =========================================================
+   EVENTO TOUCH
+   ========================================================= */
 
 startScreen.addEventListener(
     'touchend',
@@ -679,6 +620,7 @@ function makeTextSprite(
 
 
     const fontSize = 38;
+
 
     ctx.font =
         `${fontSize}px Arial`;
