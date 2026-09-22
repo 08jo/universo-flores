@@ -4,12 +4,15 @@
    - 150 frases flotando en esfera 3D
    - Estrellas de fondo
    - Control: arrastrar, rueda, pellizco
-   - Audio: precarga total en memoria (arranque instantáneo)
+   - Audio: espera a que el MP3 esté completamente preparado
    ========================================================= */
 
+
 /* ---------- CONFIGURACIÓN ---------- */
+
 const CONFIG = {
     titulo: "Un universo hecho para ti 🌻",
+
     frases: [
         "🌻 Eres de esas personas que dejan huella",
         "🌻 Tienes algo especial que se nota",
@@ -50,507 +53,2037 @@ const CONFIG = {
         "🌻 Tus palabras llegan justo cuando hacen falta",
         "🌻 Con tus palabras y tu escucha, haces mucho bien"
     ],
+
     fotos: [],
+
     musica: "assets/musica.mp3"
 };
 
+
 /* ---------- TÍTULO ---------- */
+
 document.getElementById('main-title').textContent = CONFIG.titulo;
 
+
 /* =========================================================
-   AUDIO — PRECARGA TOTAL EN MEMORIA (arranque instantáneo)
-   1) Al cargar la página, se descarga el MP3 y se decodifica
-      entero en un AudioBuffer (Web Audio API).
-   2) El <audio> queda solo como fallback.
-   3) Al clic, se hace source.start(0) → suena SIN latencia.
+   AUDIO
    ========================================================= */
+
 const VOLUMEN_FINAL = 0.5;
-const audio        = document.getElementById('audio');
-const startButton  = document.getElementById('start-button');
+
+const audio = document.getElementById('audio');
+const startButton = document.getElementById('start-button');
+const startScreen = document.getElementById('start-screen');
 
 const AC = window.AudioContext || window.webkitAudioContext;
-let audioCtx     = null;
-let masterGain   = null;
-let audioBuffer  = null;
-let sourceNode   = null;
-let audioReady   = false;
-let unlocked     = false;
 
-/* ---------- 1) <link rel=preload> por si el HTML no lo tiene ---------- */
+let audioCtx = null;
+let masterGain = null;
+let audioBuffer = null;
+let sourceNode = null;
+
+let audioReady = false;
+let unlocked = false;
+let starting = false;
+
+
+/* ---------- ESTADO INICIAL DEL BOTÓN ---------- */
+
+startButton.textContent = "Cargando música...";
+startButton.classList.add('loading');
+
+
+/* ---------- PRELOAD DEL AUDIO ---------- */
+
 (function preloadLink() {
-    if (document.querySelector('link[rel="preload"][as="audio"]')) return;
+
+    if (document.querySelector('link[rel="preload"][as="audio"]')) {
+        return;
+    }
+
     try {
+
         const link = document.createElement('link');
-        link.rel         = 'preload';
-        link.as          = 'audio';
-        link.href        = CONFIG.musica;
-        link.type        = 'audio/mpeg';
+
+        link.rel = 'preload';
+        link.as = 'audio';
+        link.href = CONFIG.musica;
+        link.type = 'audio/mpeg';
         link.crossOrigin = 'anonymous';
+
         document.head.appendChild(link);
-    } catch (e) {}
+
+    } catch (e) {
+
+        console.warn("No se pudo crear preload:", e);
+
+    }
+
 })();
 
-/* ---------- 2) Fallback <audio> ---------- */
+
+/* ---------- CONFIGURAR AUDIO HTML ---------- */
+
 audio.preload = 'auto';
+
 audio.setAttribute('playsinline', '');
 audio.setAttribute('webkit-playsinline', '');
 audio.setAttribute('crossorigin', 'anonymous');
+
+audio.volume = VOLUMEN_FINAL;
+audio.muted = false;
+
 audio.load();
 
-/* ---------- 3) Estado del botón ---------- */
+
+/* =========================================================
+   MARCAR AUDIO COMO LISTO
+   ========================================================= */
+
 function markReady(text) {
-    if (audioReady) return;
+
+    if (audioReady) {
+        return;
+    }
+
     audioReady = true;
-    startButton.textContent = text || 'Toca para entrar';
+
+    startButton.textContent = text || "🌻 Toca para entrar";
+
     startButton.classList.remove('loading');
     startButton.classList.add('ready');
+
 }
 
-/* ---------- 4) Descarga + decodificación en background ---------- */
+
+/* =========================================================
+   DESCARGAR Y DECODIFICAR EL MP3
+   ========================================================= */
+
 async function preloadAndDecode() {
+
     try {
+
+        console.log("🎵 Preparando música...");
+
+        /*
+         * Crear AudioContext.
+         *
+         * No intentamos reproducir todavía porque el navegador
+         * necesita una interacción del usuario.
+         */
+
         if (AC) {
-            audioCtx   = new AC();
+
+            audioCtx = new AC();
+
             masterGain = audioCtx.createGain();
+
             masterGain.gain.value = 0;
+
             masterGain.connect(audioCtx.destination);
+
         }
 
-        const res  = await fetch(CONFIG.musica, { cache: 'force-cache' });
+
+        /*
+         * Descargar el MP3 desde GitHub Pages.
+         *
+         * CONFIG.musica apunta a:
+         *
+         * assets/musica.mp3
+         */
+
+        const res = await fetch(CONFIG.musica, {
+            cache: 'force-cache'
+        });
+
+
+        /*
+         * Comprobar que el archivo realmente existe.
+         */
+
+        if (!res.ok) {
+
+            throw new Error(
+                `No se pudo cargar la música. HTTP ${res.status}`
+            );
+
+        }
+
+
+        /*
+         * Convertir la respuesta en datos binarios.
+         */
+
         const data = await res.arrayBuffer();
 
+
+        /*
+         * Decodificar completamente el MP3.
+         */
+
         if (audioCtx) {
-            audioBuffer = await audioCtx.decodeAudioData(data.slice(0));
+
+            audioBuffer = await audioCtx.decodeAudioData(
+                data.slice(0)
+            );
+
         }
 
-        markReady('Toca para entrar');
-    } catch (err) {
-        console.warn('Preload audio falló, usando fallback <audio>:', err);
-        markReady('Toca para entrar');
+
+        /*
+         * La música ya está lista.
+         */
+
+        console.log("✅ Música cargada y preparada");
+
+        markReady("🌻 Toca para entrar");
+
     }
+
+    catch (err) {
+
+        console.error(
+            "❌ Error preparando la música:",
+            err
+        );
+
+
+        /*
+         * Si Web Audio falla, comprobamos si el elemento
+         * <audio> consiguió cargar el archivo.
+         */
+
+        if (audio.readyState >= 2) {
+
+            console.log(
+                "🔄 Usando reproducción mediante <audio>"
+            );
+
+            markReady("🌻 Toca para entrar");
+
+        }
+
+        else {
+
+            /*
+             * Mostrar un mensaje de error temporal.
+             */
+
+            startButton.textContent =
+                "Reintentando cargar música...";
+
+            startButton.classList.remove('ready');
+
+            /*
+             * Intentar cargar nuevamente el audio HTML.
+             */
+
+            try {
+
+                audio.load();
+
+            } catch (e) {
+
+                console.error(
+                    "❌ No se pudo recargar el audio:",
+                    e
+                );
+
+            }
+
+
+            /*
+             * Después de un momento intentamos nuevamente
+             * preparar la música.
+             */
+
+            setTimeout(() => {
+
+                if (!audioReady) {
+                    preloadAndDecode();
+                }
+
+            }, 1500);
+
+        }
+
+    }
+
 }
+
+
+/*
+ * IMPORTANTE:
+ *
+ * Ya NO usamos:
+ *
+ * setTimeout(() => markReady(), 2500);
+ *
+ * porque eso podía permitir tocar el botón antes de que
+ * la música estuviera realmente preparada.
+ */
+
 preloadAndDecode();
 
-/* Fallback: si tarda más de 2.5 s, habilitar botón igual */
-setTimeout(() => markReady(), 2500);
 
-/* ---------- 5) Reproducción instantánea ---------- */
+/* =========================================================
+   REPRODUCIR DESDE AUDIOBUFFER
+   ========================================================= */
+
 function playFromBuffer() {
-    if (!audioCtx || !audioBuffer) return false;
 
-    if (audioCtx.state === 'suspended') audioCtx.resume();
+    if (!audioCtx || !audioBuffer) {
 
-    if (sourceNode) {
-        try { sourceNode.stop(); } catch (e) {}
-        sourceNode = null;
+        console.warn(
+            "⚠️ AudioBuffer todavía no está disponible"
+        );
+
+        return false;
+
     }
 
-    sourceNode = audioCtx.createBufferSource();
-    sourceNode.buffer = audioBuffer;
-    sourceNode.loop   = true;
-    sourceNode.connect(masterGain);
 
-    const now = audioCtx.currentTime;
-    masterGain.gain.cancelScheduledValues(now);
-    masterGain.gain.setValueAtTime(0, now);
-    masterGain.gain.linearRampToValueAtTime(VOLUMEN_FINAL, now + 0.6);
+    try {
 
-    sourceNode.start(0);
-    return true;
-}
+        /*
+         * Si el contexto está suspendido, lo reactivamos.
+         */
 
-function playFromElement() {
-    audio.muted  = false;
-    audio.volume = VOLUMEN_FINAL;
-    const p = audio.play();
-    if (p && typeof p.then === 'function') {
-        p.catch(() => setTimeout(playFromElement, 120));
-    }
-}
-
-/* ---------- 6) Desbloqueo global (primer gesto en cualquier parte) ---------- */
-function unlockAndPlay() {
-    if (unlocked) return;
-    unlocked = true;
-
-    if (audioCtx) {
         if (audioCtx.state === 'suspended') {
-            audioCtx.resume().then(() => {
-                if (audioBuffer) playFromBuffer();
-            }).catch(() => {});
-        } else if (audioBuffer) {
-            playFromBuffer();
+
+            audioCtx.resume();
+
         }
+
+
+        /*
+         * Detener una reproducción anterior.
+         */
+
+        if (sourceNode) {
+
+            try {
+
+                sourceNode.stop();
+
+            } catch (e) {
+                // Ya estaba detenido.
+            }
+
+            sourceNode = null;
+
+        }
+
+
+        /*
+         * Crear nueva fuente.
+         */
+
+        sourceNode =
+            audioCtx.createBufferSource();
+
+
+        sourceNode.buffer = audioBuffer;
+
+        sourceNode.loop = true;
+
+
+        /*
+         * Conectar al volumen maestro.
+         */
+
+        sourceNode.connect(masterGain);
+
+
+        /*
+         * Volumen inicial.
+         */
+
+        const now = audioCtx.currentTime;
+
+        masterGain.gain.cancelScheduledValues(now);
+
+        masterGain.gain.setValueAtTime(
+            0,
+            now
+        );
+
+
+        /*
+         * Subir suavemente el volumen.
+         */
+
+        masterGain.gain.linearRampToValueAtTime(
+            VOLUMEN_FINAL,
+            now + 0.6
+        );
+
+
+        /*
+         * Comenzar inmediatamente.
+         */
+
+        sourceNode.start(0);
+
+
+        console.log("🎵 Música iniciada");
+
+        return true;
+
     }
 
-    if (!audioBuffer) {
-        audio.muted  = false;
-        audio.volume = VOLUMEN_FINAL;
-        audio.play().catch(() => {});
+    catch (error) {
+
+        console.error(
+            "❌ Error reproduciendo AudioBuffer:",
+            error
+        );
+
+        return false;
+
     }
+
 }
 
-document.addEventListener('touchstart', unlockAndPlay, { once: true, passive: true });
-document.addEventListener('click',      unlockAndPlay, { once: true });
-document.addEventListener('keydown',    unlockAndPlay, { once: true });
 
-/* ---------- 7) Pantalla de inicio ---------- */
-const startScreen = document.getElementById('start-screen');
+/* =========================================================
+   REPRODUCCIÓN DE RESPALDO <AUDIO>
+   ========================================================= */
 
-function startExperience() {
-    if (!audioReady) return;
+async function playFromElement() {
+
+    try {
+
+        audio.muted = false;
+
+        audio.volume = VOLUMEN_FINAL;
+
+        /*
+         * Comenzamos desde el principio.
+         */
+
+        audio.currentTime = 0;
+
+
+        const promise = audio.play();
+
+
+        if (promise &&
+            typeof promise.then === 'function') {
+
+            await promise;
+
+        }
+
+
+        console.log(
+            "🎵 Música iniciada mediante <audio>"
+        );
+
+        return true;
+
+    }
+
+    catch (error) {
+
+        console.error(
+            "❌ El navegador bloqueó el audio:",
+            error
+        );
+
+        return false;
+
+    }
+
+}
+
+
+/* =========================================================
+   INICIAR EXPERIENCIA
+   ========================================================= */
+
+async function startExperience() {
+
+    /*
+     * Evitar dobles ejecuciones por touch + click.
+     */
+
+    if (starting) {
+        return;
+    }
+
+    starting = true;
+
+
+    /*
+     * Si por alguna razón se toca antes de que termine
+     * la carga, no hacemos nada.
+     */
+
+    if (!audioReady) {
+
+        console.log(
+            "⏳ La música todavía está cargando..."
+        );
+
+        starting = false;
+
+        return;
+
+    }
+
+
+    /*
+     * Ocultar pantalla de inicio.
+     */
 
     startScreen.classList.add('hidden');
-    setTimeout(() => { startScreen.style.display = 'none'; }, 900);
+
+
+    setTimeout(() => {
+
+        startScreen.style.display = 'none';
+
+    }, 900);
+
 
     unlocked = true;
-    if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
 
-    if (audioBuffer && audioCtx) {
-        playFromBuffer();
-    } else {
-        playFromElement();
+
+    let reproduced = false;
+
+
+    /*
+     * Intentar utilizar AudioBuffer.
+     */
+
+    if (audioCtx && audioBuffer) {
+
+        try {
+
+            if (audioCtx.state === 'suspended') {
+
+                await audioCtx.resume();
+
+            }
+
+            reproduced = playFromBuffer();
+
+        }
+
+        catch (error) {
+
+            console.error(
+                "Error iniciando AudioContext:",
+                error
+            );
+
+        }
+
     }
+
+
+    /*
+     * Si AudioBuffer no funcionó,
+     * usamos <audio> como respaldo.
+     */
+
+    if (!reproduced) {
+
+        reproduced = await playFromElement();
+
+    }
+
+
+    /*
+     * Si tampoco funcionó, mostramos nuevamente
+     * la pantalla para permitir otro intento.
+     */
+
+    if (!reproduced) {
+
+        console.warn(
+            "⚠️ No se pudo iniciar la música."
+        );
+
+        startScreen.style.display = 'flex';
+
+        startScreen.classList.remove('hidden');
+
+        starting = false;
+
+        return;
+
+    }
+
 }
 
-startScreen.addEventListener('click',      startExperience);
-startScreen.addEventListener('touchstart', startExperience, { passive: true, once: true });
 
-/* ---------- ESCENA ---------- */
-const canvas   = document.getElementById('c');
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
-renderer.setSize(innerWidth, innerHeight);
+/* =========================================================
+   EVENTOS DEL BOTÓN DE INICIO
+   ========================================================= */
 
-const scene  = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.1, 5000);
+/*
+ * Usamos click para computadora.
+ */
 
-let targetDist  = 300;
+startScreen.addEventListener(
+    'click',
+    startExperience
+);
+
+
+/*
+ * Usamos touchend para celulares.
+ *
+ * touchend es preferible aquí porque ocurre directamente
+ * después del toque del usuario y permite desbloquear
+ * correctamente el audio en navegadores móviles.
+ */
+
+startScreen.addEventListener(
+    'touchend',
+    (event) => {
+
+        /*
+         * Evitar que el navegador produzca comportamientos
+         * secundarios.
+         */
+
+        event.preventDefault();
+
+        startExperience();
+
+    },
+    {
+        passive: false
+    }
+);
+
+
+/* =========================================================
+   ESCENA THREE.JS
+   ========================================================= */
+
+const canvas =
+    document.getElementById('c');
+
+
+const renderer =
+    new THREE.WebGLRenderer({
+        canvas,
+        antialias: true
+    });
+
+
+renderer.setPixelRatio(
+    Math.min(
+        window.devicePixelRatio || 1,
+        2
+    )
+);
+
+
+renderer.setSize(
+    innerWidth,
+    innerHeight
+);
+
+
+const scene =
+    new THREE.Scene();
+
+
+const camera =
+    new THREE.PerspectiveCamera(
+        60,
+        innerWidth / innerHeight,
+        0.1,
+        5000
+    );
+
+
+let targetDist = 300;
+
 let currentDist = 300;
+
 let rotX = 0.2;
+
 let rotY = 0;
 
-/* ---------- ESTRELLAS ---------- */
-(function makeStars(count = 2500, spread = 3000) {
-    const g   = new THREE.BufferGeometry();
-    const pos = new Float32Array(count * 3);
-    for (let i = 0; i < count; i++) {
-        const r  = spread * (0.3 + Math.random() * 0.7);
-        const th = Math.random() * Math.PI * 2;
-        const ph = Math.acos(2 * Math.random() - 1);
-        pos[i * 3 + 0] = r * Math.sin(ph) * Math.cos(th);
-        pos[i * 3 + 1] = r * Math.cos(ph);
-        pos[i * 3 + 2] = r * Math.sin(ph) * Math.sin(th);
+
+/* =========================================================
+   ESTRELLAS
+   ========================================================= */
+
+(function makeStars(
+    count = 2500,
+    spread = 3000
+) {
+
+    const g =
+        new THREE.BufferGeometry();
+
+
+    const pos =
+        new Float32Array(
+            count * 3
+        );
+
+
+    for (
+        let i = 0;
+        i < count;
+        i++
+    ) {
+
+        const r =
+            spread *
+            (
+                0.3 +
+                Math.random() * 0.7
+            );
+
+
+        const th =
+            Math.random() *
+            Math.PI *
+            2;
+
+
+        const ph =
+            Math.acos(
+                2 * Math.random() - 1
+            );
+
+
+        pos[i * 3 + 0] =
+            r *
+            Math.sin(ph) *
+            Math.cos(th);
+
+
+        pos[i * 3 + 1] =
+            r *
+            Math.cos(ph);
+
+
+        pos[i * 3 + 2] =
+            r *
+            Math.sin(ph) *
+            Math.sin(th);
+
     }
-    g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-    scene.add(new THREE.Points(g, new THREE.PointsMaterial({
-        size: 1.5, color: 0xffffff, depthWrite: false
-    })));
+
+
+    g.setAttribute(
+        'position',
+        new THREE.BufferAttribute(
+            pos,
+            3
+        )
+    );
+
+
+    scene.add(
+        new THREE.Points(
+            g,
+            new THREE.PointsMaterial({
+                size: 1.5,
+                color: 0xffffff,
+                depthWrite: false
+            })
+        )
+    );
+
 })();
 
-/* ---------- NÚCLEO ---------- */
-const coreMat = new THREE.MeshPhongMaterial({
-    color: 0x030303, transparent: true, opacity: 0.92, shininess: 30
-});
-const core = new THREE.Mesh(new THREE.SphereGeometry(40, 64, 64), coreMat);
+
+/* =========================================================
+   NÚCLEO
+   ========================================================= */
+
+const coreMat =
+    new THREE.MeshPhongMaterial({
+
+        color: 0x030303,
+
+        transparent: true,
+
+        opacity: 0.92,
+
+        shininess: 30
+
+    });
+
+
+const core =
+    new THREE.Mesh(
+        new THREE.SphereGeometry(
+            40,
+            64,
+            64
+        ),
+        coreMat
+    );
+
+
 scene.add(core);
 
-/* ---------- LUCES ---------- */
-scene.add(new THREE.AmbientLight(0xffe066, 1.2));
-const pointLight = new THREE.PointLight(0xffd54a, 2, 800);
-pointLight.position.set(120, 100, 120);
+
+/* =========================================================
+   LUCES
+   ========================================================= */
+
+scene.add(
+    new THREE.AmbientLight(
+        0xffe066,
+        1.2
+    )
+);
+
+
+const pointLight =
+    new THREE.PointLight(
+        0xffd54a,
+        2,
+        800
+    );
+
+
+pointLight.position.set(
+    120,
+    100,
+    120
+);
+
+
 scene.add(pointLight);
 
-/* ---------- GLOW ---------- */
+
+/* =========================================================
+   GLOW
+   ========================================================= */
+
 const GLOW_BASE = 360;
-function makeGlow(size = 768, c1 = '255,235,130', c2 = '255,180,0') {
-    const c = document.createElement('canvas');
+
+
+function makeGlow(
+    size = 768,
+    c1 = '255,235,130',
+    c2 = '255,180,0'
+) {
+
+    const c =
+        document.createElement('canvas');
+
+
     c.width = c.height = size;
-    const g = c.getContext('2d');
-    const grad = g.createRadialGradient(size/2, size/2, size*0.05, size/2, size/2, size*0.5);
-    grad.addColorStop(0,   `rgba(${c1},0.55)`);
-    grad.addColorStop(0.5, `rgba(${c2},0.25)`);
-    grad.addColorStop(1,   'rgba(0,0,0,0)');
+
+
+    const g =
+        c.getContext('2d');
+
+
+    const grad =
+        g.createRadialGradient(
+            size / 2,
+            size / 2,
+            size * 0.05,
+            size / 2,
+            size / 2,
+            size * 0.5
+        );
+
+
+    grad.addColorStop(
+        0,
+        `rgba(${c1},0.55)`
+    );
+
+
+    grad.addColorStop(
+        0.5,
+        `rgba(${c2},0.25)`
+    );
+
+
+    grad.addColorStop(
+        1,
+        'rgba(0,0,0,0)'
+    );
+
+
     g.fillStyle = grad;
-    g.fillRect(0, 0, size, size);
+
+
+    g.fillRect(
+        0,
+        0,
+        size,
+        size
+    );
+
+
     return new THREE.CanvasTexture(c);
+
 }
-const glow = new THREE.Sprite(new THREE.SpriteMaterial({
-    map: makeGlow(), transparent: true, depthWrite: false
-}));
-glow.scale.set(GLOW_BASE, GLOW_BASE, 1);
+
+
+const glow =
+    new THREE.Sprite(
+        new THREE.SpriteMaterial({
+            map: makeGlow(),
+            transparent: true,
+            depthWrite: false
+        })
+    );
+
+
+glow.scale.set(
+    GLOW_BASE,
+    GLOW_BASE,
+    1
+);
+
+
 scene.add(glow);
 
-/* ---------- ANILLO ---------- */
-function ringTexture(size = 1024) {
-    const c = document.createElement('canvas');
-    c.width = c.height = size;
-    const g = c.getContext('2d');
-    g.translate(size / 2, size / 2);
 
-    const rInner = size * 0.205;
-    const rOuter = size * 0.49;
+/* =========================================================
+   ANILLO
+   ========================================================= */
 
-    const grd = g.createRadialGradient(0, 0, rInner, 0, 0, rOuter);
-    grd.addColorStop(0.00, 'rgba(255,255,245,1)');
-    grd.addColorStop(0.30, 'rgba(255,235,120,1)');
-    grd.addColorStop(0.65, 'rgba(255,200,40,0.95)');
-    grd.addColorStop(1.00, 'rgba(255,160,0,0.85)');
+function ringTexture(
+    size = 1024
+) {
+
+    const c =
+        document.createElement('canvas');
+
+
+    c.width =
+        c.height =
+        size;
+
+
+    const g =
+        c.getContext('2d');
+
+
+    g.translate(
+        size / 2,
+        size / 2
+    );
+
+
+    const rInner =
+        size * 0.205;
+
+
+    const rOuter =
+        size * 0.49;
+
+
+    const grd =
+        g.createRadialGradient(
+            0,
+            0,
+            rInner,
+            0,
+            0,
+            rOuter
+        );
+
+
+    grd.addColorStop(
+        0.00,
+        'rgba(255,255,245,1)'
+    );
+
+
+    grd.addColorStop(
+        0.30,
+        'rgba(255,235,120,1)'
+    );
+
+
+    grd.addColorStop(
+        0.65,
+        'rgba(255,200,40,0.95)'
+    );
+
+
+    grd.addColorStop(
+        1.00,
+        'rgba(255,160,0,0.85)'
+    );
+
+
     g.fillStyle = grd;
 
+
     g.beginPath();
-    g.arc(0, 0, rOuter, 0, Math.PI * 2);
-    g.arc(0, 0, rInner, 0, Math.PI * 2, true);
+
+
+    g.arc(
+        0,
+        0,
+        rOuter,
+        0,
+        Math.PI * 2
+    );
+
+
+    g.arc(
+        0,
+        0,
+        rInner,
+        0,
+        Math.PI * 2,
+        true
+    );
+
+
     g.closePath();
+
+
     g.fill();
 
+
     const bandCount = 26;
-    for (let i = 0; i < bandCount; i++) {
-        const r    = rInner + (rOuter - rInner) * (i / (bandCount - 1));
-        const dark = i % 3 === 0;
+
+
+    for (
+        let i = 0;
+        i < bandCount;
+        i++
+    ) {
+
+        const r =
+            rInner +
+            (
+                rOuter -
+                rInner
+            ) *
+            (
+                i /
+                (bandCount - 1)
+            );
+
+
+        const dark =
+            i % 3 === 0;
+
+
         g.beginPath();
-        g.arc(0, 0, r, 0, Math.PI * 2);
-        g.lineWidth   = (rOuter - rInner) / bandCount * (0.55 + Math.random() * 0.35);
-        g.strokeStyle = dark
-            ? 'rgba(110,60,0,0.20)'
-            : 'rgba(255,255,225,0.16)';
+
+
+        g.arc(
+            0,
+            0,
+            r,
+            0,
+            Math.PI * 2
+        );
+
+
+        g.lineWidth =
+            (
+                rOuter -
+                rInner
+            ) /
+            bandCount *
+            (
+                0.55 +
+                Math.random() * 0.35
+            );
+
+
+        g.strokeStyle =
+            dark
+                ? 'rgba(110,60,0,0.20)'
+                : 'rgba(255,255,225,0.16)';
+
+
         g.stroke();
+
     }
+
+
     return new THREE.CanvasTexture(c);
+
 }
 
-const ring = new THREE.Mesh(
-    new THREE.RingGeometry(42, 116, 160),
-    new THREE.MeshBasicMaterial({
-        map: ringTexture(),
-        transparent: true,
-        side: THREE.DoubleSide,
-        blending: THREE.AdditiveBlending,
-        opacity: 1
-    })
-);
-ring.rotation.x = Math.PI / 2;
+
+const ring =
+    new THREE.Mesh(
+
+        new THREE.RingGeometry(
+            42,
+            116,
+            160
+        ),
+
+        new THREE.MeshBasicMaterial({
+
+            map: ringTexture(),
+
+            transparent: true,
+
+            side: THREE.DoubleSide,
+
+            blending:
+                THREE.AdditiveBlending,
+
+            opacity: 1
+
+        })
+
+    );
+
+
+ring.rotation.x =
+    Math.PI / 2;
+
+
 scene.add(ring);
 
-/* ---------- FRASES ---------- */
-const frasesBase = (Array.isArray(CONFIG.frases) && CONFIG.frases.length)
-    ? CONFIG.frases
-    : ["🌻"];
+
+/* =========================================================
+   FRASES
+   ========================================================= */
+
+const frasesBase =
+    (
+        Array.isArray(CONFIG.frases) &&
+        CONFIG.frases.length
+    )
+        ? CONFIG.frases
+        : ["🌻"];
+
 
 const WORD_SLOTS = 150;
-const WORDS = Array.from({ length: WORD_SLOTS }, (_, i) => frasesBase[i % frasesBase.length]);
 
-function makeTextTexture(text, color) {
-    const c = document.createElement('canvas');
+
+const WORDS =
+    Array.from(
+        {
+            length: WORD_SLOTS
+        },
+        (_, i) =>
+            frasesBase[
+                i % frasesBase.length
+            ]
+    );
+
+
+function makeTextTexture(
+    text,
+    color
+) {
+
+    const c =
+        document.createElement('canvas');
+
+
     c.width = 512;
+
     c.height = 128;
-    const ctx = c.getContext('2d');
-    ctx.clearRect(0, 0, c.width, c.height);
+
+
+    const ctx =
+        c.getContext('2d');
+
+
+    ctx.clearRect(
+        0,
+        0,
+        c.width,
+        c.height
+    );
+
+
     ctx.textAlign = 'center';
+
     ctx.textBaseline = 'middle';
+
+
     ctx.fillStyle = '#fff';
+
+
     ctx.shadowColor = color;
+
     ctx.shadowBlur = 30;
 
-    const maxWidth = c.width - 48;
+
+    const maxWidth =
+        c.width - 48;
+
+
     let fontSize = 60;
-    ctx.font = `${fontSize}px 'Indie Flower', cursive`;
-    while (ctx.measureText(text).width > maxWidth && fontSize > 24) {
+
+
+    ctx.font =
+        `${fontSize}px 'Indie Flower', cursive`;
+
+
+    while (
+        ctx.measureText(text).width >
+            maxWidth &&
+        fontSize > 24
+    ) {
+
         fontSize -= 2;
-        ctx.font = `${fontSize}px 'Indie Flower', cursive`;
+
+        ctx.font =
+            `${fontSize}px 'Indie Flower', cursive`;
+
     }
-    ctx.fillText(text, c.width / 2, c.height / 2);
+
+
+    ctx.fillText(
+        text,
+        c.width / 2,
+        c.height / 2
+    );
+
+
     return new THREE.CanvasTexture(c);
+
 }
+
 
 const COLORS = [
-    '#ffd700','#ffe066','#ffcc33','#ffb347','#fff2b0',
-    '#ffaa00','#f4c430','#e6b800','#ffdb58','#f0c419'
+
+    '#ffd700',
+    '#ffe066',
+    '#ffcc33',
+    '#ffb347',
+    '#fff2b0',
+    '#ffaa00',
+    '#f4c430',
+    '#e6b800',
+    '#ffdb58',
+    '#f0c419'
+
 ];
 
-const textGroup = new THREE.Group();
+
+const textGroup =
+    new THREE.Group();
+
+
 scene.add(textGroup);
 
-document.fonts.load("40px 'Indie Flower'").catch(() => {}).then(() => {
-    for (let i = 0; i < WORDS.length; i++) {
-        const tex = makeTextTexture(WORDS[i], COLORS[i % COLORS.length]);
-        const mat = new THREE.SpriteMaterial({ map: tex, transparent: true });
-        const sp  = new THREE.Sprite(mat);
-        sp.scale.set(68, 21.8, 1);
 
-        const phi   = Math.acos(2 * Math.random() - 1);
-        const theta = Math.random() * Math.PI * 2;
-        const r     = 150 + Math.random() * 120;
+document
+    .fonts
+    .load("40px 'Indie Flower'")
+    .catch(() => {})
+    .then(() => {
 
-        sp.position.set(
-            r * Math.sin(phi) * Math.cos(theta),
-            r * Math.cos(phi),
-            r * Math.sin(phi) * Math.sin(theta)
-        );
-        sp.userData = {
-            phi, theta, radius: r,
-            speed: 0.001 + Math.random() * 0.001
-        };
-        textGroup.add(sp);
-    }
-});
+        for (
+            let i = 0;
+            i < WORDS.length;
+            i++
+        ) {
 
-/* ---------- FOTOS (opcional) ---------- */
-const fotosBase = (Array.isArray(CONFIG.fotos) && CONFIG.fotos.length)
-    ? CONFIG.fotos
-    : [];
+            const tex =
+                makeTextTexture(
+                    WORDS[i],
+                    COLORS[
+                        i % COLORS.length
+                    ]
+                );
 
-function makePhotoSprite(url, size) {
-    const c = document.createElement('canvas');
-    c.width = c.height = 256;
-    const tex = new THREE.CanvasTexture(c);
-    const mat = new THREE.SpriteMaterial({ map: tex, transparent: true });
-    const sp  = new THREE.Sprite(mat);
-    sp.scale.set(size, size, 1);
 
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
+            const mat =
+                new THREE.SpriteMaterial({
+                    map: tex,
+                    transparent: true
+                });
+
+
+            const sp =
+                new THREE.Sprite(mat);
+
+
+            sp.scale.set(
+                68,
+                21.8,
+                1
+            );
+
+
+            const phi =
+                Math.acos(
+                    2 * Math.random() - 1
+                );
+
+
+            const theta =
+                Math.random() *
+                Math.PI *
+                2;
+
+
+            const r =
+                150 +
+                Math.random() * 120;
+
+
+            sp.position.set(
+
+                r *
+                Math.sin(phi) *
+                Math.cos(theta),
+
+                r *
+                Math.cos(phi),
+
+                r *
+                Math.sin(phi) *
+                Math.sin(theta)
+
+            );
+
+
+            sp.userData = {
+
+                phi,
+
+                theta,
+
+                radius: r,
+
+                speed:
+                    0.001 +
+                    Math.random() * 0.001
+
+            };
+
+
+            textGroup.add(sp);
+
+        }
+
+    });
+
+
+/* =========================================================
+   FOTOS
+   ========================================================= */
+
+const fotosBase =
+    (
+        Array.isArray(CONFIG.fotos) &&
+        CONFIG.fotos.length
+    )
+        ? CONFIG.fotos
+        : [];
+
+
+function makePhotoSprite(
+    url,
+    size
+) {
+
+    const c =
+        document.createElement('canvas');
+
+
+    c.width =
+        c.height =
+        256;
+
+
+    const tex =
+        new THREE.CanvasTexture(c);
+
+
+    const mat =
+        new THREE.SpriteMaterial({
+            map: tex,
+            transparent: true
+        });
+
+
+    const sp =
+        new THREE.Sprite(mat);
+
+
+    sp.scale.set(
+        size,
+        size,
+        1
+    );
+
+
+    const img =
+        new Image();
+
+
+    img.crossOrigin =
+        'anonymous';
+
+
     img.onload = () => {
-        const ctx = c.getContext('2d');
-        ctx.clearRect(0, 0, c.width, c.height);
-        const s = Math.min(c.width / img.width, c.height / img.height);
-        ctx.drawImage(
-            img,
-            (c.width  - img.width  * s) / 2,
-            (c.height - img.height * s) / 2,
-            img.width * s, img.height * s
+
+        const ctx =
+            c.getContext('2d');
+
+
+        ctx.clearRect(
+            0,
+            0,
+            c.width,
+            c.height
         );
+
+
+        const s =
+            Math.min(
+                c.width / img.width,
+                c.height / img.height
+            );
+
+
+        ctx.drawImage(
+
+            img,
+
+            (
+                c.width -
+                img.width * s
+            ) / 2,
+
+            (
+                c.height -
+                img.height * s
+            ) / 2,
+
+            img.width * s,
+
+            img.height * s
+
+        );
+
+
         tex.needsUpdate = true;
 
-        const aspect = img.naturalWidth / img.naturalHeight;
-        const aX = Math.min(1, aspect);
-        const aY = Math.min(1, 1 / aspect);
-        sp.scale.set(size * aX, size * aY, 1);
+
+        const aspect =
+            img.naturalWidth /
+            img.naturalHeight;
+
+
+        const aX =
+            Math.min(
+                1,
+                aspect
+            );
+
+
+        const aY =
+            Math.min(
+                1,
+                1 / aspect
+            );
+
+
+        sp.scale.set(
+            size * aX,
+            size * aY,
+            1
+        );
+
     };
-    img.onerror = () => {};
+
+
+    img.onerror = () => {
+
+        console.warn(
+            "No se pudo cargar la foto:",
+            url
+        );
+
+    };
+
+
     img.src = url;
+
+
     return sp;
+
 }
 
-const photoGroup = new THREE.Group();
+
+const photoGroup =
+    new THREE.Group();
+
+
 scene.add(photoGroup);
 
-if (fotosBase.length > 0) {
-    const PHOTO_COUNT = 26;
-    for (let i = 0; i < PHOTO_COUNT; i++) {
-        const url  = fotosBase[i % fotosBase.length];
-        const size = 28 + Math.random() * 20;
-        const sp   = makePhotoSprite(url, size);
 
-        const phi   = Math.acos(2 * Math.random() - 1);
-        const theta = Math.random() * Math.PI * 2;
-        const r     = 140 + Math.random() * 170;
+if (fotosBase.length > 0) {
+
+    const PHOTO_COUNT = 26;
+
+
+    for (
+        let i = 0;
+        i < PHOTO_COUNT;
+        i++
+    ) {
+
+        const url =
+            fotosBase[
+                i % fotosBase.length
+            ];
+
+
+        const size =
+            28 +
+            Math.random() * 20;
+
+
+        const sp =
+            makePhotoSprite(
+                url,
+                size
+            );
+
+
+        const phi =
+            Math.acos(
+                2 * Math.random() - 1
+            );
+
+
+        const theta =
+            Math.random() *
+            Math.PI *
+            2;
+
+
+        const r =
+            140 +
+            Math.random() * 170;
+
 
         sp.position.set(
-            r * Math.sin(phi) * Math.cos(theta),
-            r * Math.cos(phi),
-            r * Math.sin(phi) * Math.sin(theta)
+
+            r *
+            Math.sin(phi) *
+            Math.cos(theta),
+
+            r *
+            Math.cos(phi),
+
+            r *
+            Math.sin(phi) *
+            Math.sin(theta)
+
         );
+
+
         sp.userData = {
-            phi, theta, radius: r,
-            speed: 0.0006 + Math.random() * 0.0012
+
+            phi,
+
+            theta,
+
+            radius: r,
+
+            speed:
+                0.0006 +
+                Math.random() * 0.0012
+
         };
+
+
         photoGroup.add(sp);
+
     }
+
 }
 
-/* ---------- CONTROLES ---------- */
-let dragging = false, lastX = 0, lastY = 0;
+
+/* =========================================================
+   CONTROLES
+   ========================================================= */
+
+let dragging = false;
+
+let lastX = 0;
+
+let lastY = 0;
+
 
 function onDown(e) {
+
     dragging = true;
-    const t = e.touches ? e.touches[0] : e;
-    lastX = t.clientX;
-    lastY = t.clientY;
+
+
+    const t =
+        e.touches
+            ? e.touches[0]
+            : e;
+
+
+    lastX =
+        t.clientX;
+
+
+    lastY =
+        t.clientY;
+
 }
+
+
 function onMove(e) {
-    if (!dragging) return;
-    const t  = e.touches ? e.touches[0] : e;
-    const dx = (t.clientX - lastX) / innerWidth;
-    const dy = (t.clientY - lastY) / innerHeight;
-    rotY -= dx * 5;
-    rotX  = Math.max(-1.2, Math.min(1.2, rotX + dy * 3.5));
-    lastX = t.clientX;
-    lastY = t.clientY;
-}
-function onUp() { dragging = false; }
 
-addEventListener('mousedown',  onDown);
-addEventListener('mousemove',  onMove);
-addEventListener('mouseup',    onUp);
-addEventListener('touchstart', onDown, { passive: true });
-addEventListener('touchmove',  onMove, { passive: true });
-addEventListener('touchend',   onUp,   { passive: true });
-
-addEventListener('wheel', (e) => {
-    targetDist += e.deltaY * 0.25;
-    targetDist  = Math.max(160, Math.min(600, targetDist));
-}, { passive: true });
-
-/* Zoom pellizco */
-let pinch = 0;
-addEventListener('touchmove', (e) => {
-    if (e.touches && e.touches.length === 2) {
-        e.preventDefault();
-        const dx = e.touches[0].clientX - e.touches[1].clientX;
-        const dy = e.touches[0].clientY - e.touches[1].clientY;
-        const d  = Math.hypot(dx, dy);
-        if (pinch) {
-            targetDist += (pinch - d) * 0.5;
-            targetDist  = Math.max(160, Math.min(600, targetDist));
-        }
-        pinch = d;
+    if (!dragging) {
+        return;
     }
-}, { passive: false });
-addEventListener('touchend', () => { pinch = 0; }, { passive: true });
 
-/* ---------- ANIMACIÓN ---------- */
+
+    const t =
+        e.touches
+            ? e.touches[0]
+            : e;
+
+
+    const dx =
+        (
+            t.clientX -
+            lastX
+        ) /
+        innerWidth;
+
+
+    const dy =
+        (
+            t.clientY -
+            lastY
+        ) /
+        innerHeight;
+
+
+    rotY -=
+        dx * 5;
+
+
+    rotX =
+        Math.max(
+            -1.2,
+            Math.min(
+                1.2,
+                rotX +
+                dy * 3.5
+            )
+        );
+
+
+    lastX =
+        t.clientX;
+
+
+    lastY =
+        t.clientY;
+
+}
+
+
+function onUp() {
+
+    dragging = false;
+
+}
+
+
+addEventListener(
+    'mousedown',
+    onDown
+);
+
+
+addEventListener(
+    'mousemove',
+    onMove
+);
+
+
+addEventListener(
+    'mouseup',
+    onUp
+);
+
+
+addEventListener(
+    'touchstart',
+    onDown,
+    {
+        passive: true
+    }
+);
+
+
+addEventListener(
+    'touchmove',
+    onMove,
+    {
+        passive: true
+    }
+);
+
+
+addEventListener(
+    'touchend',
+    onUp,
+    {
+        passive: true
+    }
+);
+
+
+/* =========================================================
+   ZOOM
+   ========================================================= */
+
+addEventListener(
+    'wheel',
+    (e) => {
+
+        targetDist +=
+            e.deltaY * 0.25;
+
+
+        targetDist =
+            Math.max(
+                160,
+                Math.min(
+                    600,
+                    targetDist
+                )
+            );
+
+    },
+    {
+        passive: true
+    }
+);
+
+
+/* =========================================================
+   ZOOM PELLIZCO
+   ========================================================= */
+
+let pinch = 0;
+
+
+addEventListener(
+    'touchmove',
+    (e) => {
+
+        if (
+            e.touches &&
+            e.touches.length === 2
+        ) {
+
+            e.preventDefault();
+
+
+            const dx =
+                e.touches[0].clientX -
+                e.touches[1].clientX;
+
+
+            const dy =
+                e.touches[0].clientY -
+                e.touches[1].clientY;
+
+
+            const d =
+                Math.hypot(
+                    dx,
+                    dy
+                );
+
+
+            if (pinch) {
+
+                targetDist +=
+                    (
+                        pinch - d
+                    ) * 0.5;
+
+
+                targetDist =
+                    Math.max(
+                        160,
+                        Math.min(
+                            600,
+                            targetDist
+                        )
+                    );
+
+            }
+
+
+            pinch = d;
+
+        }
+
+    },
+    {
+        passive: false
+    }
+);
+
+
+addEventListener(
+    'touchend',
+    () => {
+
+        pinch = 0;
+
+    },
+    {
+        passive: true
+    }
+);
+
+
+/* =========================================================
+   ANIMACIÓN
+   ========================================================= */
+
 let t = 0;
+
+
 function tick() {
+
     requestAnimationFrame(tick);
+
+
     t += 0.01;
+
+
+    /*
+     * Rotación del anillo.
+     */
 
     ring.rotation.z += 0.003;
 
-    const glowScale = 1 + Math.sin(t * 0.4) * 0.03;
-    glow.scale.set(GLOW_BASE * glowScale, GLOW_BASE * glowScale, 1);
 
-    const s = 1.0 + 0.05 * Math.sin(t * 3);
-    core.scale.set(s, s, s);
+    /*
+     * Animación del glow.
+     */
 
-    textGroup.children.forEach((sp) => {
-        sp.material.opacity = 0.8 + 0.2 * Math.sin(t * 2);
-        sp.userData.theta += sp.userData.speed;
-        sp.position.x = sp.userData.radius * Math.sin(sp.userData.phi) * Math.cos(sp.userData.theta);
-        sp.position.z = sp.userData.radius * Math.sin(sp.userData.phi) * Math.sin(sp.userData.theta);
-    });
+    const glowScale =
+        1 +
+        Math.sin(t * 0.4) *
+        0.03;
 
-    photoGroup.children.forEach((sp) => {
-        sp.material.opacity = 0.85 + 0.15 * Math.sin(t * 2 + sp.userData.radius);
-        sp.userData.theta += sp.userData.speed;
-        sp.position.x = sp.userData.radius * Math.sin(sp.userData.phi) * Math.cos(sp.userData.theta);
-        sp.position.z = sp.userData.radius * Math.sin(sp.userData.phi) * Math.sin(sp.userData.theta);
-    });
 
-    currentDist += (targetDist - currentDist) * 0.06;
+    glow.scale.set(
 
-    const cx = Math.cos(rotX), sx = Math.sin(rotX);
-    const cy = Math.cos(rotY), sy = Math.sin(rotY);
-    camera.position.set(currentDist * sy * cx, currentDist * sx, currentDist * cy * cx);
-    camera.lookAt(0, 0, 0);
+        GLOW_BASE *
+            glowScale,
 
-    renderer.render(scene, camera);
+        GLOW_BASE *
+            glowScale,
+
+        1
+
+    );
+
+
+    /*
+     * Respiración del núcleo.
+     */
+
+    const s =
+        1.0 +
+        0.05 *
+        Math.sin(t * 3);
+
+
+    core.scale.set(
+        s,
+        s,
+        s
+    );
+
+
+    /*
+     * Animar frases.
+     */
+
+    textGroup.children.forEach(
+        (sp) => {
+
+            sp.material.opacity =
+                0.8 +
+                0.2 *
+                Math.sin(t * 2);
+
+
+            sp.userData.theta +=
+                sp.userData.speed;
+
+
+            sp.position.x =
+                sp.userData.radius *
+                Math.sin(
+                    sp.userData.phi
+                ) *
+                Math.cos(
+                    sp.userData.theta
+                );
+
+
+            sp.position.z =
+                sp.userData.radius *
+                Math.sin(
+                    sp.userData.phi
+                ) *
+                Math.sin(
+                    sp.userData.theta
+                );
+
+        }
+    );
+
+
+    /*
+     * Animar fotos.
+     */
+
+    photoGroup.children.forEach(
+        (sp) => {
+
+            sp.material.opacity =
+                0.85 +
+                0.15 *
+                Math.sin(
+                    t * 2 +
+                    sp.userData.radius
+                );
+
+
+            sp.userData.theta +=
+                sp.userData.speed;
+
+
+            sp.position.x =
+                sp.userData.radius *
+                Math.sin(
+                    sp.userData.phi
+                ) *
+                Math.cos(
+                    sp.userData.theta
+                );
+
+
+            sp.position.z =
+                sp.userData.radius *
+                Math.sin(
+                    sp.userData.phi
+                ) *
+                Math.sin(
+                    sp.userData.theta
+                );
+
+        }
+    );
+
+
+    /*
+     * Movimiento suave de cámara.
+     */
+
+    currentDist +=
+        (
+            targetDist -
+            currentDist
+        ) * 0.06;
+
+
+    const cx =
+        Math.cos(rotX);
+
+
+    const sx =
+        Math.sin(rotX);
+
+
+    const cy =
+        Math.cos(rotY);
+
+
+    const sy =
+        Math.sin(rotY);
+
+
+    camera.position.set(
+
+        currentDist *
+        sy *
+        cx,
+
+        currentDist *
+        sx,
+
+        currentDist *
+        cy *
+        cx
+
+    );
+
+
+    camera.lookAt(
+        0,
+        0,
+        0
+    );
+
+
+    renderer.render(
+        scene,
+        camera
+    );
+
 }
+
+
 tick();
 
-/* ---------- RESIZE ---------- */
-addEventListener('resize', () => {
-    renderer.setSize(innerWidth, innerHeight);
-    camera.aspect = innerWidth / innerHeight;
-    camera.updateProjectionMatrix();
-});
+
+/* =========================================================
+   RESIZE
+   ========================================================= */
+
+addEventListener(
+    'resize',
+    () => {
+
+        renderer.setSize(
+            innerWidth,
+            innerHeight
+        );
+
+
+        camera.aspect =
+            innerWidth /
+            innerHeight;
+
+
+        camera.updateProjectionMatrix();
+
+    }
+);
