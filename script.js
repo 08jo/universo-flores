@@ -166,7 +166,6 @@ async function preloadAndDecode() {
 
         console.log("🎵 Preparando música...");
 
-
         /*
          * Crear AudioContext.
          *
@@ -269,13 +268,13 @@ async function preloadAndDecode() {
         else {
 
             /*
-             * Mostrar estado de carga.
+             * Mostrar un mensaje de error temporal.
              */
 
-            startButton.textContent = "Cargando...";
+            startButton.textContent =
+                "Reintentando cargar música...";
 
             startButton.classList.remove('ready');
-
 
             /*
              * Intentar cargar nuevamente el audio HTML.
@@ -461,7 +460,6 @@ async function playFromElement() {
 
         audio.volume = VOLUMEN_FINAL;
 
-
         /*
          * Comenzamos desde el principio.
          */
@@ -472,10 +470,8 @@ async function playFromElement() {
         const promise = audio.play();
 
 
-        if (
-            promise &&
-            typeof promise.then === 'function'
-        ) {
+        if (promise &&
+            typeof promise.then === 'function') {
 
             await promise;
 
