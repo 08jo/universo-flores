@@ -2,12 +2,16 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#000000">
     <title>Un detalle para ti 🌻</title>
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Indie+Flower&family=Cormorant+Garamond:ital,wght@0,300;0,500;1,400&display=swap" rel="stylesheet">
+
+    <!-- Preload del audio: empieza a bajar el MP3 ANTES de que cargue el JS -->
+    <link rel="preload" href="assets/musica.mp3" as="audio" type="audio/mpeg" crossorigin="anonymous">
 
     <link rel="stylesheet" href="style.css">
 </head>
@@ -24,7 +28,7 @@
         <div id="start-button">Cargando...</div>
     </div>
 
-    <audio id="audio" loop preload="auto">
+    <audio id="audio" loop preload="auto" playsinline webkit-playsinline crossorigin="anonymous">
         <source src="assets/musica.mp3" type="audio/mpeg">
     </audio>
 
