@@ -4,7 +4,7 @@
    - 150 frases flotando en esfera 3D
    - Estrellas de fondo
    - Control: arrastrar, rueda, pellizco
-   - Audio: reproducción directa mediante <audio>
+   - Audio: espera a que el MP3 esté completamente preparado
    ========================================================= */
 
 
@@ -75,6 +75,13 @@ const audio = document.getElementById('audio');
 const startButton = document.getElementById('start-button');
 const startScreen = document.getElementById('start-screen');
 
+const AC = window.AudioContext || window.webkitAudioContext;
+
+let audioCtx = null;
+let masterGain = null;
+let audioBuffer = null;
+let sourceNode = null;
+
 let audioReady = false;
 let unlocked = false;
 let starting = false;
@@ -82,76 +89,49 @@ let starting = false;
 
 /* ---------- ESTADO INICIAL DEL BOTÓN ---------- */
 
-startButton.textContent = "Cargando...";
+startButton.textContent = "Cargando música...";
 startButton.classList.add('loading');
 
 
-/* =========================================================
-   CONFIGURAR AUDIO HTML
-   ========================================================= */
+/* ---------- PRELOAD DEL AUDIO ---------- */
+
+(function preloadLink() {
+
+    if (document.querySelector('link[rel="preload"][as="audio"]')) {
+        return;
+    }
+
+    try {
+
+        const link = document.createElement('link');
+
+        link.rel = 'preload';
+        link.as = 'audio';
+        link.href = CONFIG.musica;
+        link.type = 'audio/mpeg';
+        link.crossOrigin = 'anonymous';
+
+        document.head.appendChild(link);
+
+    } catch (e) {
+
+        console.warn("No se pudo crear preload:", e);
+
+    }
+
+})();
+
+
+/* ---------- CONFIGURAR AUDIO HTML ---------- */
 
 audio.preload = 'auto';
 
-audio.setAttribute(
-    'playsinline',
-    ''
-);
-
-audio.setAttribute(
-    'webkit-playsinline',
-    ''
-);
+audio.setAttribute('playsinline', '');
+audio.setAttribute('webkit-playsinline', '');
+audio.setAttribute('crossorigin', 'anonymous');
 
 audio.volume = VOLUMEN_FINAL;
 audio.muted = false;
-
-
-/*
- * Ya no utilizamos fetch() ni decodeAudioData().
- *
- * El elemento <audio> se encarga directamente de
- * descargar y reproducir el MP3.
- *
- * Esto evita descargar y procesar el mismo archivo
- * dos veces.
- */
-
-audio.addEventListener(
-    'canplay',
-    () => {
-
-        markReady();
-
-    },
-    {
-        once: true
-    }
-);
-
-
-audio.addEventListener(
-    'error',
-    () => {
-
-        console.error(
-            '❌ Error cargando la música:',
-            audio.error
-        );
-
-        startButton.textContent =
-            'Cargando...';
-
-        startButton.classList.remove(
-            'ready'
-        );
-
-        startButton.classList.add(
-            'loading'
-        );
-
-    }
-);
-
 
 audio.load();
 
@@ -160,7 +140,7 @@ audio.load();
    MARCAR AUDIO COMO LISTO
    ========================================================= */
 
-function markReady() {
+function markReady(text) {
 
     if (audioReady) {
         return;
@@ -168,40 +148,308 @@ function markReady() {
 
     audioReady = true;
 
-    startButton.textContent =
-        "🌻 Toca para entrar";
+    startButton.textContent = text || "🌻 Toca para entrar";
 
-    startButton.classList.remove(
-        'loading'
-    );
-
-    startButton.classList.add(
-        'ready'
-    );
-
-    console.log(
-        '✅ Música lista para reproducirse'
-    );
-}
-
-
-/*
- * Si el navegador ya tiene suficientes datos cargados
- * antes de que se ejecute canplay, lo detectamos.
- */
-
-if (
-    audio.readyState >=
-    HTMLMediaElement.HAVE_FUTURE_DATA
-) {
-
-    markReady();
+    startButton.classList.remove('loading');
+    startButton.classList.add('ready');
 
 }
 
 
 /* =========================================================
-   REPRODUCCIÓN MEDIANTE <AUDIO>
+   DESCARGAR Y DECODIFICAR EL MP3
+   ========================================================= */
+
+async function preloadAndDecode() {
+
+    try {
+
+        console.log("🎵 Preparando música...");
+
+        /*
+         * Crear AudioContext.
+         *
+         * No intentamos reproducir todavía porque el navegador
+         * necesita una interacción del usuario.
+         */
+
+        if (AC) {
+
+            audioCtx = new AC();
+
+            masterGain = audioCtx.createGain();
+
+            masterGain.gain.value = 0;
+
+            masterGain.connect(audioCtx.destination);
+
+        }
+
+
+        /*
+         * Descargar el MP3 desde GitHub Pages.
+         *
+         * CONFIG.musica apunta a:
+         *
+         * assets/musica.mp3
+         */
+
+        const res = await fetch(CONFIG.musica, {
+            cache: 'force-cache'
+        });
+
+
+        /*
+         * Comprobar que el archivo realmente existe.
+         */
+
+        if (!res.ok) {
+
+            throw new Error(
+                `No se pudo cargar la música. HTTP ${res.status}`
+            );
+
+        }
+
+
+        /*
+         * Convertir la respuesta en datos binarios.
+         */
+
+        const data = await res.arrayBuffer();
+
+
+        /*
+         * Decodificar completamente el MP3.
+         */
+
+        if (audioCtx) {
+
+            audioBuffer = await audioCtx.decodeAudioData(
+                data.slice(0)
+            );
+
+        }
+
+
+        /*
+         * La música ya está lista.
+         */
+
+        console.log("✅ Música cargada y preparada");
+
+        markReady("🌻 Toca para entrar");
+
+    }
+
+    catch (err) {
+
+        console.error(
+            "❌ Error preparando la música:",
+            err
+        );
+
+
+        /*
+         * Si Web Audio falla, comprobamos si el elemento
+         * <audio> consiguió cargar el archivo.
+         */
+
+        if (audio.readyState >= 2) {
+
+            console.log(
+                "🔄 Usando reproducción mediante <audio>"
+            );
+
+            markReady("🌻 Toca para entrar");
+
+        }
+
+        else {
+
+            /*
+             * Mostrar un mensaje de error temporal.
+             */
+
+            startButton.textContent =
+                "Reintentando cargar música...";
+
+            startButton.classList.remove('ready');
+
+            /*
+             * Intentar cargar nuevamente el audio HTML.
+             */
+
+            try {
+
+                audio.load();
+
+            } catch (e) {
+
+                console.error(
+                    "❌ No se pudo recargar el audio:",
+                    e
+                );
+
+            }
+
+
+            /*
+             * Después de un momento intentamos nuevamente
+             * preparar la música.
+             */
+
+            setTimeout(() => {
+
+                if (!audioReady) {
+                    preloadAndDecode();
+                }
+
+            }, 1500);
+
+        }
+
+    }
+
+}
+
+
+/*
+ * IMPORTANTE:
+ *
+ * Ya NO usamos:
+ *
+ * setTimeout(() => markReady(), 2500);
+ *
+ * porque eso podía permitir tocar el botón antes de que
+ * la música estuviera realmente preparada.
+ */
+
+preloadAndDecode();
+
+
+/* =========================================================
+   REPRODUCIR DESDE AUDIOBUFFER
+   ========================================================= */
+
+function playFromBuffer() {
+
+    if (!audioCtx || !audioBuffer) {
+
+        console.warn(
+            "⚠️ AudioBuffer todavía no está disponible"
+        );
+
+        return false;
+
+    }
+
+
+    try {
+
+        /*
+         * Si el contexto está suspendido, lo reactivamos.
+         */
+
+        if (audioCtx.state === 'suspended') {
+
+            audioCtx.resume();
+
+        }
+
+
+        /*
+         * Detener una reproducción anterior.
+         */
+
+        if (sourceNode) {
+
+            try {
+
+                sourceNode.stop();
+
+            } catch (e) {
+                // Ya estaba detenido.
+            }
+
+            sourceNode = null;
+
+        }
+
+
+        /*
+         * Crear nueva fuente.
+         */
+
+        sourceNode =
+            audioCtx.createBufferSource();
+
+
+        sourceNode.buffer = audioBuffer;
+
+        sourceNode.loop = true;
+
+
+        /*
+         * Conectar al volumen maestro.
+         */
+
+        sourceNode.connect(masterGain);
+
+
+        /*
+         * Volumen inicial.
+         */
+
+        const now = audioCtx.currentTime;
+
+        masterGain.gain.cancelScheduledValues(now);
+
+        masterGain.gain.setValueAtTime(
+            0,
+            now
+        );
+
+
+        /*
+         * Subir suavemente el volumen.
+         */
+
+        masterGain.gain.linearRampToValueAtTime(
+            VOLUMEN_FINAL,
+            now + 0.6
+        );
+
+
+        /*
+         * Comenzar inmediatamente.
+         */
+
+        sourceNode.start(0);
+
+
+        console.log("🎵 Música iniciada");
+
+        return true;
+
+    }
+
+    catch (error) {
+
+        console.error(
+            "❌ Error reproduciendo AudioBuffer:",
+            error
+        );
+
+        return false;
+
+    }
+
+}
+
+
+/* =========================================================
+   REPRODUCCIÓN DE RESPALDO <AUDIO>
    ========================================================= */
 
 async function playFromElement() {
@@ -210,34 +458,20 @@ async function playFromElement() {
 
         audio.muted = false;
 
-        audio.volume =
-            VOLUMEN_FINAL;
+        audio.volume = VOLUMEN_FINAL;
 
         /*
-         * Comenzar desde el principio.
+         * Comenzamos desde el principio.
          */
 
         audio.currentTime = 0;
 
 
-        /*
-         * Reproducir directamente mediante
-         * el elemento HTML <audio>.
-         */
-
-        const promise =
-            audio.play();
+        const promise = audio.play();
 
 
-        /*
-         * En navegadores modernos play()
-         * devuelve una Promise.
-         */
-
-        if (
-            promise &&
-            typeof promise.then === 'function'
-        ) {
+        if (promise &&
+            typeof promise.then === 'function') {
 
             await promise;
 
@@ -245,7 +479,7 @@ async function playFromElement() {
 
 
         console.log(
-            '🎵 Música iniciada mediante <audio>'
+            "🎵 Música iniciada mediante <audio>"
         );
 
         return true;
@@ -255,7 +489,7 @@ async function playFromElement() {
     catch (error) {
 
         console.error(
-            '❌ El navegador bloqueó el audio:',
+            "❌ El navegador bloqueó el audio:",
             error
         );
 
@@ -273,8 +507,7 @@ async function playFromElement() {
 async function startExperience() {
 
     /*
-     * Evitar dobles ejecuciones por
-     * touch + click.
+     * Evitar dobles ejecuciones por touch + click.
      */
 
     if (starting) {
@@ -285,14 +518,14 @@ async function startExperience() {
 
 
     /*
-     * Si todavía no hay suficientes datos
-     * para reproducir, esperamos.
+     * Si por alguna razón se toca antes de que termine
+     * la carga, no hacemos nada.
      */
 
     if (!audioReady) {
 
         console.log(
-            '⏳ La música todavía está cargando...'
+            "⏳ La música todavía está cargando..."
         );
 
         starting = false;
@@ -303,65 +536,87 @@ async function startExperience() {
 
 
     /*
-     * El play() ocurre como consecuencia
-     * directa de la interacción del usuario.
-     *
-     * Esto es importante para las políticas
-     * de reproducción automática de los navegadores.
+     * Ocultar pantalla de inicio.
      */
 
-    const reproduced =
-        await playFromElement();
+    startScreen.classList.add('hidden');
+
+
+    setTimeout(() => {
+
+        startScreen.style.display = 'none';
+
+    }, 900);
+
+
+    unlocked = true;
+
+
+    let reproduced = false;
 
 
     /*
-     * Si no se pudo reproducir,
-     * mantenemos la pantalla inicial.
+     * Intentar utilizar AudioBuffer.
+     */
+
+    if (audioCtx && audioBuffer) {
+
+        try {
+
+            if (audioCtx.state === 'suspended') {
+
+                await audioCtx.resume();
+
+            }
+
+            reproduced = playFromBuffer();
+
+        }
+
+        catch (error) {
+
+            console.error(
+                "Error iniciando AudioContext:",
+                error
+            );
+
+        }
+
+    }
+
+
+    /*
+     * Si AudioBuffer no funcionó,
+     * usamos <audio> como respaldo.
+     */
+
+    if (!reproduced) {
+
+        reproduced = await playFromElement();
+
+    }
+
+
+    /*
+     * Si tampoco funcionó, mostramos nuevamente
+     * la pantalla para permitir otro intento.
      */
 
     if (!reproduced) {
 
         console.warn(
-            '⚠️ No se pudo iniciar la música.'
+            "⚠️ No se pudo iniciar la música."
         );
 
-        startScreen.style.display =
-            'flex';
+        startScreen.style.display = 'flex';
 
-        startScreen.classList.remove(
-            'hidden'
-        );
+        startScreen.classList.remove('hidden');
 
         starting = false;
 
         return;
 
     }
-
-
-    /*
-     * La música comenzó correctamente.
-     *
-     * Ahora ocultamos la pantalla inicial.
-     */
-
-    startScreen.classList.add(
-        'hidden'
-    );
-
-
-    setTimeout(
-        () => {
-
-            startScreen.style.display =
-                'none';
-
-        },
-        900
-    );
-
-
-    unlocked = true;
 
 }
 
@@ -370,9 +625,8 @@ async function startExperience() {
    EVENTOS DEL BOTÓN DE INICIO
    ========================================================= */
 
-
 /*
- * Computadora.
+ * Usamos click para computadora.
  */
 
 startScreen.addEventListener(
@@ -382,12 +636,21 @@ startScreen.addEventListener(
 
 
 /*
- * Teléfonos y tablets.
+ * Usamos touchend para celulares.
+ *
+ * touchend es preferible aquí porque ocurre directamente
+ * después del toque del usuario y permite desbloquear
+ * correctamente el audio en navegadores móviles.
  */
 
 startScreen.addEventListener(
     'touchend',
     (event) => {
+
+        /*
+         * Evitar que el navegador produzca comportamientos
+         * secundarios.
+         */
 
         event.preventDefault();
 
@@ -617,9 +880,7 @@ function makeGlow(
         document.createElement('canvas');
 
 
-    c.width =
-        c.height =
-        size;
+    c.width = c.height = size;
 
 
     const g =
@@ -829,14 +1090,22 @@ function ringTexture(
         );
 
 
+        g.lineWidth =
+            (
+                rOuter -
+                rInner
+            ) /
+            bandCount *
+            (
+                0.55 +
+                Math.random() * 0.35
+            );
+
+
         g.strokeStyle =
             dark
-                ? 'rgba(255,190,30,0.18)'
-                : 'rgba(255,255,220,0.12)';
-
-
-        g.lineWidth =
-            size * 0.008;
+                ? 'rgba(110,60,0,0.20)'
+                : 'rgba(255,255,225,0.16)';
 
 
         g.stroke();
@@ -853,397 +1122,494 @@ const ring =
     new THREE.Mesh(
 
         new THREE.RingGeometry(
-            58,
-            140,
-            256
+            42,
+            116,
+            160
         ),
 
         new THREE.MeshBasicMaterial({
+
             map: ringTexture(),
+
             transparent: true,
+
             side: THREE.DoubleSide,
-            depthWrite: false
+
+            blending:
+                THREE.AdditiveBlending,
+
+            opacity: 1
+
         })
 
     );
 
 
 ring.rotation.x =
-    Math.PI * 0.35;
-
-
-ring.rotation.z =
-    Math.PI * 0.08;
+    Math.PI / 2;
 
 
 scene.add(ring);
 
 
 /* =========================================================
-   FLORES
+   FRASES
    ========================================================= */
 
-function makeFlower(
-    radius = 3,
-    petals = 12
+const frasesBase =
+    (
+        Array.isArray(CONFIG.frases) &&
+        CONFIG.frases.length
+    )
+        ? CONFIG.frases
+        : ["🌻"];
+
+
+const WORD_SLOTS = 150;
+
+
+const WORDS =
+    Array.from(
+        {
+            length: WORD_SLOTS
+        },
+        (_, i) =>
+            frasesBase[
+                i % frasesBase.length
+            ]
+    );
+
+
+function makeTextTexture(
+    text,
+    color
 ) {
 
-    const group =
-        new THREE.Group();
+    const c =
+        document.createElement('canvas');
 
 
-    const petalMaterial =
-        new THREE.MeshBasicMaterial({
-            color: 0xffd83d,
-            transparent: true,
-            opacity: 0.95,
-            side: THREE.DoubleSide
-        });
+    c.width = 512;
+
+    c.height = 128;
 
 
-    const centerMaterial =
-        new THREE.MeshBasicMaterial({
-            color: 0x6b3d00
-        });
+    const ctx =
+        c.getContext('2d');
 
 
-    for (
-        let i = 0;
-        i < petals;
-        i++
+    ctx.clearRect(
+        0,
+        0,
+        c.width,
+        c.height
+    );
+
+
+    ctx.textAlign = 'center';
+
+    ctx.textBaseline = 'middle';
+
+
+    ctx.fillStyle = '#fff';
+
+
+    ctx.shadowColor = color;
+
+    ctx.shadowBlur = 30;
+
+
+    const maxWidth =
+        c.width - 48;
+
+
+    let fontSize = 60;
+
+
+    ctx.font =
+        `${fontSize}px 'Indie Flower', cursive`;
+
+
+    while (
+        ctx.measureText(text).width >
+            maxWidth &&
+        fontSize > 24
     ) {
 
-        const angle =
-            (
-                i /
-                petals
-            ) *
-            Math.PI *
-            2;
+        fontSize -= 2;
 
-
-        const petal =
-            new THREE.Mesh(
-
-                new THREE.CircleGeometry(
-                    radius * 0.45,
-                    16
-                ),
-
-                petalMaterial
-
-            );
-
-
-        petal.position.x =
-            Math.cos(angle) *
-            radius *
-            0.4;
-
-
-        petal.position.y =
-            Math.sin(angle) *
-            radius *
-            0.4;
-
-
-        petal.rotation.z =
-            angle;
-
-
-        group.add(petal);
+        ctx.font =
+            `${fontSize}px 'Indie Flower', cursive`;
 
     }
 
 
-    const center =
-        new THREE.Mesh(
-            new THREE.CircleGeometry(
-                radius * 0.3,
-                24
-            ),
-            centerMaterial
-        );
+    ctx.fillText(
+        text,
+        c.width / 2,
+        c.height / 2
+    );
 
 
-    center.position.z =
-        0.02;
-
-
-    group.add(center);
-
-
-    return group;
+    return new THREE.CanvasTexture(c);
 
 }
 
 
-/* =========================================================
-   FLORES ALREDEDOR DEL NÚCLEO
-   ========================================================= */
+const COLORS = [
 
-const flowerGroup =
+    '#ffd700',
+    '#ffe066',
+    '#ffcc33',
+    '#ffb347',
+    '#fff2b0',
+    '#ffaa00',
+    '#f4c430',
+    '#e6b800',
+    '#ffdb58',
+    '#f0c419'
+
+];
+
+
+const textGroup =
     new THREE.Group();
 
 
-const flowerCount = 40;
+scene.add(textGroup);
 
 
-for (
-    let i = 0;
-    i < flowerCount;
-    i++
-) {
+document
+    .fonts
+    .load("40px 'Indie Flower'")
+    .catch(() => {})
+    .then(() => {
 
-    const flower =
-        makeFlower(
-            4 +
-            Math.random() * 3
-        );
+        for (
+            let i = 0;
+            i < WORDS.length;
+            i++
+        ) {
 
-
-    const theta =
-        Math.random() *
-        Math.PI *
-        2;
-
-
-    const phi =
-        Math.acos(
-            2 * Math.random() - 1
-        );
+            const tex =
+                makeTextTexture(
+                    WORDS[i],
+                    COLORS[
+                        i % COLORS.length
+                    ]
+                );
 
 
-    const radius =
-        65 +
-        Math.random() * 45;
+            const mat =
+                new THREE.SpriteMaterial({
+                    map: tex,
+                    transparent: true
+                });
 
 
-    flower.position.set(
-
-        radius *
-        Math.sin(phi) *
-        Math.cos(theta),
-
-        radius *
-        Math.cos(phi),
-
-        radius *
-        Math.sin(phi) *
-        Math.sin(theta)
-
-    );
+            const sp =
+                new THREE.Sprite(mat);
 
 
-    flower.scale.setScalar(
-        0.5 +
-        Math.random() * 0.9
-    );
+            sp.scale.set(
+                68,
+                21.8,
+                1
+            );
 
 
-    flower.rotation.x =
-        Math.random() *
-        Math.PI;
+            const phi =
+                Math.acos(
+                    2 * Math.random() - 1
+                );
 
 
-    flower.rotation.y =
-        Math.random() *
-        Math.PI;
+            const theta =
+                Math.random() *
+                Math.PI *
+                2;
 
 
-    flower.rotation.z =
-        Math.random() *
-        Math.PI;
+            const r =
+                150 +
+                Math.random() * 120;
 
 
-    flowerGroup.add(flower);
+            sp.position.set(
 
-}
+                r *
+                Math.sin(phi) *
+                Math.cos(theta),
+
+                r *
+                Math.cos(phi),
+
+                r *
+                Math.sin(phi) *
+                Math.sin(theta)
+
+            );
 
 
-scene.add(flowerGroup);
+            sp.userData = {
+
+                phi,
+
+                theta,
+
+                radius: r,
+
+                speed:
+                    0.001 +
+                    Math.random() * 0.001
+
+            };
+
+
+            textGroup.add(sp);
+
+        }
+
+    });
 
 
 /* =========================================================
-   FRASES
+   FOTOS
    ========================================================= */
 
-function createTextSprite(
-    text
+const fotosBase =
+    (
+        Array.isArray(CONFIG.fotos) &&
+        CONFIG.fotos.length
+    )
+        ? CONFIG.fotos
+        : [];
+
+
+function makePhotoSprite(
+    url,
+    size
 ) {
 
-    const canvas =
+    const c =
         document.createElement('canvas');
 
 
-    const context =
-        canvas.getContext('2d');
+    c.width =
+        c.height =
+        256;
 
 
-    const fontSize = 42;
+    const tex =
+        new THREE.CanvasTexture(c);
 
 
-    context.font =
-        `${fontSize}px "Cormorant Garamond", serif`;
-
-
-    const metrics =
-        context.measureText(text);
-
-
-    canvas.width =
-        Math.ceil(
-            metrics.width + 60
-        );
-
-
-    canvas.height = 80;
-
-
-    context.font =
-        `${fontSize}px "Cormorant Garamond", serif`;
-
-
-    context.fillStyle =
-        'rgba(255,245,180,0.95)';
-
-
-    context.textAlign =
-        'center';
-
-
-    context.textBaseline =
-        'middle';
-
-
-    context.shadowColor =
-        'rgba(255,190,40,0.8)';
-
-
-    context.shadowBlur = 10;
-
-
-    context.fillText(
-        text,
-        canvas.width / 2,
-        canvas.height / 2
-    );
-
-
-    const texture =
-        new THREE.CanvasTexture(
-            canvas
-        );
-
-
-    texture.minFilter =
-        THREE.LinearFilter;
-
-
-    texture.magFilter =
-        THREE.LinearFilter;
-
-
-    const material =
+    const mat =
         new THREE.SpriteMaterial({
-            map: texture,
-            transparent: true,
-            depthWrite: false
+            map: tex,
+            transparent: true
         });
 
 
-    const sprite =
-        new THREE.Sprite(material);
+    const sp =
+        new THREE.Sprite(mat);
 
 
-    const scale =
-        0.18;
-
-
-    sprite.scale.set(
-        canvas.width * scale,
-        canvas.height * scale,
+    sp.scale.set(
+        size,
+        size,
         1
     );
 
 
-    return sprite;
+    const img =
+        new Image();
+
+
+    img.crossOrigin =
+        'anonymous';
+
+
+    img.onload = () => {
+
+        const ctx =
+            c.getContext('2d');
+
+
+        ctx.clearRect(
+            0,
+            0,
+            c.width,
+            c.height
+        );
+
+
+        const s =
+            Math.min(
+                c.width / img.width,
+                c.height / img.height
+            );
+
+
+        ctx.drawImage(
+
+            img,
+
+            (
+                c.width -
+                img.width * s
+            ) / 2,
+
+            (
+                c.height -
+                img.height * s
+            ) / 2,
+
+            img.width * s,
+
+            img.height * s
+
+        );
+
+
+        tex.needsUpdate = true;
+
+
+        const aspect =
+            img.naturalWidth /
+            img.naturalHeight;
+
+
+        const aX =
+            Math.min(
+                1,
+                aspect
+            );
+
+
+        const aY =
+            Math.min(
+                1,
+                1 / aspect
+            );
+
+
+        sp.scale.set(
+            size * aX,
+            size * aY,
+            1
+        );
+
+    };
+
+
+    img.onerror = () => {
+
+        console.warn(
+            "No se pudo cargar la foto:",
+            url
+        );
+
+    };
+
+
+    img.src = url;
+
+
+    return sp;
 
 }
 
 
-/* =========================================================
-   DISTRIBUIR FRASES EN ESFERA
-   ========================================================= */
-
-const phraseGroup =
+const photoGroup =
     new THREE.Group();
 
 
-const PHRASE_RADIUS = 180;
+scene.add(photoGroup);
 
 
-CONFIG.frases.forEach(
-    (text, index) => {
+if (fotosBase.length > 0) {
 
-        const sprite =
-            createTextSprite(text);
+    const PHOTO_COUNT = 26;
+
+
+    for (
+        let i = 0;
+        i < PHOTO_COUNT;
+        i++
+    ) {
+
+        const url =
+            fotosBase[
+                i % fotosBase.length
+            ];
+
+
+        const size =
+            28 +
+            Math.random() * 20;
+
+
+        const sp =
+            makePhotoSprite(
+                url,
+                size
+            );
 
 
         const phi =
             Math.acos(
-                1 -
-                2 *
-                (
-                    index + 0.5
-                ) /
-                CONFIG.frases.length
+                2 * Math.random() - 1
             );
 
 
         const theta =
+            Math.random() *
             Math.PI *
-            (
-                1 +
-                Math.sqrt(5)
-            ) *
-            index;
+            2;
 
 
-        sprite.position.set(
+        const r =
+            140 +
+            Math.random() * 170;
 
-            PHRASE_RADIUS *
+
+        sp.position.set(
+
+            r *
             Math.sin(phi) *
             Math.cos(theta),
 
-            PHRASE_RADIUS *
+            r *
             Math.cos(phi),
 
-            PHRASE_RADIUS *
+            r *
             Math.sin(phi) *
             Math.sin(theta)
 
         );
 
 
-        sprite.userData = {
-
-            radius:
-                PHRASE_RADIUS,
+        sp.userData = {
 
             phi,
-            theta
+
+            theta,
+
+            radius: r,
+
+            speed:
+                0.0006 +
+                Math.random() * 0.0012
 
         };
 
 
-        phraseGroup.add(sprite);
+        photoGroup.add(sp);
 
     }
-);
 
-
-scene.add(phraseGroup);
+}
 
 
 /* =========================================================
@@ -1252,129 +1618,153 @@ scene.add(phraseGroup);
 
 let dragging = false;
 
-let previousX = 0;
+let lastX = 0;
 
-let previousY = 0;
-
-let pinchDistance = null;
+let lastY = 0;
 
 
-/* ---------- RATÓN ---------- */
+function onDown(e) {
 
-canvas.addEventListener(
-    'pointerdown',
-    (event) => {
+    dragging = true;
 
-        dragging = true;
 
-        previousX =
-            event.clientX;
+    const t =
+        e.touches
+            ? e.touches[0]
+            : e;
 
-        previousY =
-            event.clientY;
 
-        canvas.setPointerCapture(
-            event.pointerId
+    lastX =
+        t.clientX;
+
+
+    lastY =
+        t.clientY;
+
+}
+
+
+function onMove(e) {
+
+    if (!dragging) {
+        return;
+    }
+
+
+    const t =
+        e.touches
+            ? e.touches[0]
+            : e;
+
+
+    const dx =
+        (
+            t.clientX -
+            lastX
+        ) /
+        innerWidth;
+
+
+    const dy =
+        (
+            t.clientY -
+            lastY
+        ) /
+        innerHeight;
+
+
+    rotY -=
+        dx * 5;
+
+
+    rotX =
+        Math.max(
+            -1.2,
+            Math.min(
+                1.2,
+                rotX +
+                dy * 3.5
+            )
         );
 
+
+    lastX =
+        t.clientX;
+
+
+    lastY =
+        t.clientY;
+
+}
+
+
+function onUp() {
+
+    dragging = false;
+
+}
+
+
+addEventListener(
+    'mousedown',
+    onDown
+);
+
+
+addEventListener(
+    'mousemove',
+    onMove
+);
+
+
+addEventListener(
+    'mouseup',
+    onUp
+);
+
+
+addEventListener(
+    'touchstart',
+    onDown,
+    {
+        passive: true
     }
 );
 
 
-canvas.addEventListener(
-    'pointermove',
-    (event) => {
-
-        if (!dragging) {
-            return;
-        }
-
-
-        const dx =
-            event.clientX -
-            previousX;
-
-
-        const dy =
-            event.clientY -
-            previousY;
-
-
-        previousX =
-            event.clientX;
-
-        previousY =
-            event.clientY;
-
-
-        rotY +=
-            dx * 0.005;
-
-
-        rotX +=
-            dy * 0.005;
-
-
-        rotX =
-            Math.max(
-                -1.4,
-                Math.min(
-                    1.4,
-                    rotX
-                )
-            );
-
+addEventListener(
+    'touchmove',
+    onMove,
+    {
+        passive: true
     }
 );
 
 
-canvas.addEventListener(
-    'pointerup',
-    (event) => {
-
-        dragging = false;
-
-        try {
-
-            canvas.releasePointerCapture(
-                event.pointerId
-            );
-
-        } catch (e) {
-            // Sin acción.
-        }
-
+addEventListener(
+    'touchend',
+    onUp,
+    {
+        passive: true
     }
 );
 
 
-canvas.addEventListener(
-    'pointercancel',
-    () => {
+/* =========================================================
+   ZOOM
+   ========================================================= */
 
-        dragging = false;
-
-    }
-);
-
-
-/* ---------- RUEDA ---------- */
-
-canvas.addEventListener(
+addEventListener(
     'wheel',
-    (event) => {
-
-        event.preventDefault();
-
+    (e) => {
 
         targetDist +=
-            event.deltaY *
-            0.35;
+            e.deltaY * 0.25;
 
 
         targetDist =
             Math.max(
-                150,
+                160,
                 Math.min(
                     600,
                     targetDist
@@ -1383,29 +1773,83 @@ canvas.addEventListener(
 
     },
     {
-        passive: false
+        passive: true
     }
 );
 
 
 /* =========================================================
-   PELLIZCO
+   ZOOM PELLIZCO
    ========================================================= */
 
-canvas.addEventListener(
-    'touchstart',
-    (event) => {
+let pinch = 0;
+
+
+addEventListener(
+    'touchmove',
+    (e) => {
 
         if (
-            event.touches.length === 2
+            e.touches &&
+            e.touches.length === 2
         ) {
 
-            pinchDistance =
-                getPinchDistance(
-                    event.touches
+            e.preventDefault();
+
+
+            const dx =
+                e.touches[0].clientX -
+                e.touches[1].clientX;
+
+
+            const dy =
+                e.touches[0].clientY -
+                e.touches[1].clientY;
+
+
+            const d =
+                Math.hypot(
+                    dx,
+                    dy
                 );
 
+
+            if (pinch) {
+
+                targetDist +=
+                    (
+                        pinch - d
+                    ) * 0.5;
+
+
+                targetDist =
+                    Math.max(
+                        160,
+                        Math.min(
+                            600,
+                            targetDist
+                        )
+                    );
+
+            }
+
+
+            pinch = d;
+
         }
+
+    },
+    {
+        passive: false
+    }
+);
+
+
+addEventListener(
+    'touchend',
+    () => {
+
+        pinch = 0;
 
     },
     {
@@ -1414,207 +1858,146 @@ canvas.addEventListener(
 );
 
 
-canvas.addEventListener(
-    'touchmove',
-    (event) => {
-
-        if (
-            event.touches.length !== 2
-        ) {
-
-            return;
-
-        }
-
-
-        event.preventDefault();
-
-
-        const current =
-            getPinchDistance(
-                event.touches
-            );
-
-
-        if (
-            pinchDistance !== null
-        ) {
-
-            const delta =
-                pinchDistance -
-                current;
-
-
-            targetDist +=
-                delta *
-                0.8;
-
-
-            targetDist =
-                Math.max(
-                    150,
-                    Math.min(
-                        600,
-                        targetDist
-                    )
-                );
-
-        }
-
-
-        pinchDistance =
-            current;
-
-    },
-    {
-        passive: false
-    }
-);
-
-
-canvas.addEventListener(
-    'touchend',
-    () => {
-
-        pinchDistance = null;
-
-    }
-);
-
-
-function getPinchDistance(
-    touches
-) {
-
-    const dx =
-        touches[0].clientX -
-        touches[1].clientX;
-
-
-    const dy =
-        touches[0].clientY -
-        touches[1].clientY;
-
-
-    return Math.sqrt(
-        dx * dx +
-        dy * dy
-    );
-
-}
-
-
 /* =========================================================
    ANIMACIÓN
    ========================================================= */
 
-const clock =
-    new THREE.Clock();
+let t = 0;
 
 
 function tick() {
 
-    requestAnimationFrame(
-        tick
+    requestAnimationFrame(tick);
+
+
+    t += 0.01;
+
+
+    /*
+     * Rotación del anillo.
+     */
+
+    ring.rotation.z += 0.003;
+
+
+    /*
+     * Animación del glow.
+     */
+
+    const glowScale =
+        1 +
+        Math.sin(t * 0.4) *
+        0.03;
+
+
+    glow.scale.set(
+
+        GLOW_BASE *
+            glowScale,
+
+        GLOW_BASE *
+            glowScale,
+
+        1
+
     );
 
 
-    const elapsed =
-        clock.getElapsedTime();
+    /*
+     * Respiración del núcleo.
+     */
+
+    const s =
+        1.0 +
+        0.05 *
+        Math.sin(t * 3);
+
+
+    core.scale.set(
+        s,
+        s,
+        s
+    );
 
 
     /*
-     * Rotación suave del universo.
+     * Animar frases.
      */
 
-    phraseGroup.rotation.y =
-        elapsed * 0.025;
+    textGroup.children.forEach(
+        (sp) => {
+
+            sp.material.opacity =
+                0.8 +
+                0.2 *
+                Math.sin(t * 2);
 
 
-    flowerGroup.rotation.y =
-        elapsed * 0.015;
+            sp.userData.theta +=
+                sp.userData.speed;
 
 
-    ring.rotation.z =
-        Math.PI * 0.08 +
-        Math.sin(
-            elapsed * 0.2
-        ) * 0.015;
-
-
-    /*
-     * Movimiento suave de las flores.
-     */
-
-    flowerGroup.children.forEach(
-        (flower, index) => {
-
-            flower.position.y +=
+            sp.position.x =
+                sp.userData.radius *
                 Math.sin(
-                    elapsed * 0.8 +
-                    index
+                    sp.userData.phi
                 ) *
-                0.01;
+                Math.cos(
+                    sp.userData.theta
+                );
+
+
+            sp.position.z =
+                sp.userData.radius *
+                Math.sin(
+                    sp.userData.phi
+                ) *
+                Math.sin(
+                    sp.userData.theta
+                );
 
         }
     );
 
 
     /*
-     * Movimiento de las frases.
+     * Animar fotos.
      */
 
-    phraseGroup.children.forEach(
-        (sp, index) => {
+    photoGroup.children.forEach(
+        (sp) => {
 
-            const t =
-                elapsed *
-                0.3 +
-                index *
-                0.15;
-
-
-            const basePhi =
-                sp.userData.phi;
-
-
-            const baseTheta =
-                sp.userData.theta;
-
-
-            const radius =
-                sp.userData.radius;
-
-
-            const phi =
-                basePhi +
-                Math.sin(t) *
-                0.02;
-
-
-            const theta =
-                baseTheta +
+            sp.material.opacity =
+                0.85 +
+                0.15 *
                 Math.sin(
-                    t * 0.7
-                ) *
-                0.02;
+                    t * 2 +
+                    sp.userData.radius
+                );
+
+
+            sp.userData.theta +=
+                sp.userData.speed;
 
 
             sp.position.x =
-                radius *
-                Math.sin(phi) *
-                Math.cos(theta);
-
-
-            sp.position.y =
-                radius *
-                Math.cos(phi);
+                sp.userData.radius *
+                Math.sin(
+                    sp.userData.phi
+                ) *
+                Math.cos(
+                    sp.userData.theta
+                );
 
 
             sp.position.z =
-                radius *
-                Math.sin(phi) *
-                Math.sin(theta);
+                sp.userData.radius *
+                Math.sin(
+                    sp.userData.phi
+                ) *
+                Math.sin(
+                    sp.userData.theta
+                );
 
         }
     );
