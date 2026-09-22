@@ -4,7 +4,7 @@
    - 150 frases flotando en esfera 3D
    - Estrellas de fondo
    - Control: arrastrar, rueda, pellizco
-   - Audio: espera a que el MP3 esté completamente preparado
+   - Audio: reproducción directa mediante <audio>.play()
    ========================================================= */
 
 
@@ -75,13 +75,6 @@ const audio = document.getElementById('audio');
 const startButton = document.getElementById('start-button');
 const startScreen = document.getElementById('start-screen');
 
-const AC = window.AudioContext || window.webkitAudioContext;
-
-let audioCtx = null;
-let masterGain = null;
-let audioBuffer = null;
-let sourceNode = null;
-
 let audioReady = false;
 let unlocked = false;
 let starting = false;
@@ -89,49 +82,49 @@ let starting = false;
 
 /* ---------- ESTADO INICIAL DEL BOTÓN ---------- */
 
-startButton.textContent = "Cargando música...";
+startButton.textContent = "Cargando...";
 startButton.classList.add('loading');
 
 
-/* ---------- PRELOAD DEL AUDIO ---------- */
-
-(function preloadLink() {
-
-    if (document.querySelector('link[rel="preload"][as="audio"]')) {
-        return;
-    }
-
-    try {
-
-        const link = document.createElement('link');
-
-        link.rel = 'preload';
-        link.as = 'audio';
-        link.href = CONFIG.musica;
-        link.type = 'audio/mpeg';
-        link.crossOrigin = 'anonymous';
-
-        document.head.appendChild(link);
-
-    } catch (e) {
-
-        console.warn("No se pudo crear preload:", e);
-
-    }
-
-})();
-
-
-/* ---------- CONFIGURAR AUDIO HTML ---------- */
+/* =========================================================
+   CONFIGURAR AUDIO HTML
+   ========================================================= */
 
 audio.preload = 'auto';
-
+audio.loop = true;
 audio.setAttribute('playsinline', '');
 audio.setAttribute('webkit-playsinline', '');
-audio.setAttribute('crossorigin', 'anonymous');
-
 audio.volume = VOLUMEN_FINAL;
 audio.muted = false;
+
+
+/*
+ * El navegador comienza a cargar el MP3 directamente.
+ * No se utiliza AudioContext.
+ * No se utiliza fetch().
+ * No se utiliza decodeAudioData().
+ */
+
+audio.addEventListener('canplay', () => {
+    markReady();
+}, { once: true });
+
+
+audio.addEventListener('error', () => {
+
+    console.error(
+        '❌ Error cargando la música:',
+        audio.error
+    );
+
+    startButton.textContent = 'Cargando...';
+
+    startButton.classList.remove('ready');
+
+    startButton.classList.add('loading');
+
+});
+
 
 audio.load();
 
@@ -140,7 +133,7 @@ audio.load();
    MARCAR AUDIO COMO LISTO
    ========================================================= */
 
-function markReady(text) {
+function markReady() {
 
     if (audioReady) {
         return;
@@ -148,308 +141,36 @@ function markReady(text) {
 
     audioReady = true;
 
-    startButton.textContent = text || "🌻 Toca para entrar";
+    startButton.textContent = "🌻 Toca para entrar";
 
     startButton.classList.remove('loading');
+
     startButton.classList.add('ready');
 
-}
-
-
-/* =========================================================
-   DESCARGAR Y DECODIFICAR EL MP3
-   ========================================================= */
-
-async function preloadAndDecode() {
-
-    try {
-
-        console.log("🎵 Preparando música...");
-
-        /*
-         * Crear AudioContext.
-         *
-         * No intentamos reproducir todavía porque el navegador
-         * necesita una interacción del usuario.
-         */
-
-        if (AC) {
-
-            audioCtx = new AC();
-
-            masterGain = audioCtx.createGain();
-
-            masterGain.gain.value = 0;
-
-            masterGain.connect(audioCtx.destination);
-
-        }
-
-
-        /*
-         * Descargar el MP3 desde GitHub Pages.
-         *
-         * CONFIG.musica apunta a:
-         *
-         * assets/musica.mp3
-         */
-
-        const res = await fetch(CONFIG.musica, {
-            cache: 'force-cache'
-        });
-
-
-        /*
-         * Comprobar que el archivo realmente existe.
-         */
-
-        if (!res.ok) {
-
-            throw new Error(
-                `No se pudo cargar la música. HTTP ${res.status}`
-            );
-
-        }
-
-
-        /*
-         * Convertir la respuesta en datos binarios.
-         */
-
-        const data = await res.arrayBuffer();
-
-
-        /*
-         * Decodificar completamente el MP3.
-         */
-
-        if (audioCtx) {
-
-            audioBuffer = await audioCtx.decodeAudioData(
-                data.slice(0)
-            );
-
-        }
-
-
-        /*
-         * La música ya está lista.
-         */
-
-        console.log("✅ Música cargada y preparada");
-
-        markReady("🌻 Toca para entrar");
-
-    }
-
-    catch (err) {
-
-        console.error(
-            "❌ Error preparando la música:",
-            err
-        );
-
-
-        /*
-         * Si Web Audio falla, comprobamos si el elemento
-         * <audio> consiguió cargar el archivo.
-         */
-
-        if (audio.readyState >= 2) {
-
-            console.log(
-                "🔄 Usando reproducción mediante <audio>"
-            );
-
-            markReady("🌻 Toca para entrar");
-
-        }
-
-        else {
-
-            /*
-             * Mostrar un mensaje de error temporal.
-             */
-
-            startButton.textContent =
-                "Reintentando cargar música...";
-
-            startButton.classList.remove('ready');
-
-            /*
-             * Intentar cargar nuevamente el audio HTML.
-             */
-
-            try {
-
-                audio.load();
-
-            } catch (e) {
-
-                console.error(
-                    "❌ No se pudo recargar el audio:",
-                    e
-                );
-
-            }
-
-
-            /*
-             * Después de un momento intentamos nuevamente
-             * preparar la música.
-             */
-
-            setTimeout(() => {
-
-                if (!audioReady) {
-                    preloadAndDecode();
-                }
-
-            }, 1500);
-
-        }
-
-    }
+    console.log(
+        '✅ Música lista para reproducirse'
+    );
 
 }
 
 
 /*
- * IMPORTANTE:
- *
- * Ya NO usamos:
- *
- * setTimeout(() => markReady(), 2500);
- *
- * porque eso podía permitir tocar el botón antes de que
- * la música estuviera realmente preparada.
+ * Si el navegador ya tenía suficiente audio cargado,
+ * lo detectamos inmediatamente.
  */
 
-preloadAndDecode();
+if (
+    audio.readyState >=
+    HTMLMediaElement.HAVE_FUTURE_DATA
+) {
 
-
-/* =========================================================
-   REPRODUCIR DESDE AUDIOBUFFER
-   ========================================================= */
-
-function playFromBuffer() {
-
-    if (!audioCtx || !audioBuffer) {
-
-        console.warn(
-            "⚠️ AudioBuffer todavía no está disponible"
-        );
-
-        return false;
-
-    }
-
-
-    try {
-
-        /*
-         * Si el contexto está suspendido, lo reactivamos.
-         */
-
-        if (audioCtx.state === 'suspended') {
-
-            audioCtx.resume();
-
-        }
-
-
-        /*
-         * Detener una reproducción anterior.
-         */
-
-        if (sourceNode) {
-
-            try {
-
-                sourceNode.stop();
-
-            } catch (e) {
-                // Ya estaba detenido.
-            }
-
-            sourceNode = null;
-
-        }
-
-
-        /*
-         * Crear nueva fuente.
-         */
-
-        sourceNode =
-            audioCtx.createBufferSource();
-
-
-        sourceNode.buffer = audioBuffer;
-
-        sourceNode.loop = true;
-
-
-        /*
-         * Conectar al volumen maestro.
-         */
-
-        sourceNode.connect(masterGain);
-
-
-        /*
-         * Volumen inicial.
-         */
-
-        const now = audioCtx.currentTime;
-
-        masterGain.gain.cancelScheduledValues(now);
-
-        masterGain.gain.setValueAtTime(
-            0,
-            now
-        );
-
-
-        /*
-         * Subir suavemente el volumen.
-         */
-
-        masterGain.gain.linearRampToValueAtTime(
-            VOLUMEN_FINAL,
-            now + 0.6
-        );
-
-
-        /*
-         * Comenzar inmediatamente.
-         */
-
-        sourceNode.start(0);
-
-
-        console.log("🎵 Música iniciada");
-
-        return true;
-
-    }
-
-    catch (error) {
-
-        console.error(
-            "❌ Error reproduciendo AudioBuffer:",
-            error
-        );
-
-        return false;
-
-    }
+    markReady();
 
 }
 
 
 /* =========================================================
-   REPRODUCCIÓN DE RESPALDO <AUDIO>
+   REPRODUCCIÓN DIRECTA MEDIANTE <audio>.play()
    ========================================================= */
 
 async function playFromElement() {
@@ -460,39 +181,34 @@ async function playFromElement() {
 
         audio.volume = VOLUMEN_FINAL;
 
-        /*
-         * Comenzamos desde el principio.
-         */
-
         audio.currentTime = 0;
 
-
-        /* =====================================================
-           AUDIO.PLAY()
-           ===================================================== */
+        /*
+         * Esta es ahora la ÚNICA forma de reproducir
+         * la música.
+         */
 
         const promise = audio.play();
 
-        if (promise &&
-            typeof promise.then === 'function') {
+        if (
+            promise &&
+            typeof promise.then === 'function'
+        ) {
 
             await promise;
 
         }
 
-
         console.log(
-            "🎵 Música iniciada mediante <audio>"
+            '🎵 Música iniciada mediante <audio>.play()'
         );
 
         return true;
 
-    }
-
-    catch (error) {
+    } catch (error) {
 
         console.error(
-            "❌ El navegador bloqueó el audio:",
+            '❌ El navegador bloqueó el audio:',
             error
         );
 
@@ -509,10 +225,6 @@ async function playFromElement() {
 
 async function startExperience() {
 
-    /*
-     * Evitar dobles ejecuciones por touch + click.
-     */
-
     if (starting) {
         return;
     }
@@ -521,14 +233,27 @@ async function startExperience() {
 
 
     /*
-     * Si por alguna razón se toca antes de que termine
-     * la carga, no hacemos nada.
+     * IMPORTANTE:
+     * No esperamos a que el MP3 termine de descargarse.
+     *
+     * El navegador se encarga del buffering directamente
+     * mediante el elemento <audio>.
      */
 
-    if (!audioReady) {
+    const reproduced =
+        await playFromElement();
 
-        console.log(
-            "⏳ La música todavía está cargando..."
+
+    if (!reproduced) {
+
+        console.warn(
+            '⚠️ No se pudo iniciar la música.'
+        );
+
+        startScreen.style.display = 'flex';
+
+        startScreen.classList.remove(
+            'hidden'
         );
 
         starting = false;
@@ -539,10 +264,12 @@ async function startExperience() {
 
 
     /*
-     * Ocultar pantalla de inicio.
+     * La música comenzó correctamente.
      */
 
-    startScreen.classList.add('hidden');
+    startScreen.classList.add(
+        'hidden'
+    );
 
 
     setTimeout(() => {
@@ -554,72 +281,7 @@ async function startExperience() {
 
     unlocked = true;
 
-
-    let reproduced = false;
-
-
-    /*
-     * Intentar utilizar AudioBuffer.
-     */
-
-    if (audioCtx && audioBuffer) {
-
-        try {
-
-            if (audioCtx.state === 'suspended') {
-
-                await audioCtx.resume();
-
-            }
-
-            reproduced = playFromBuffer();
-
-        }
-
-        catch (error) {
-
-            console.error(
-                "Error iniciando AudioContext:",
-                error
-            );
-
-        }
-
-    }
-
-
-    /*
-     * Si AudioBuffer no funcionó,
-     * usamos <audio> como respaldo.
-     */
-
-    if (!reproduced) {
-
-        reproduced = await playFromElement();
-
-    }
-
-
-    /*
-     * Si tampoco funcionó, mostramos nuevamente
-     * la pantalla para permitir otro intento.
-     */
-
-    if (!reproduced) {
-
-        console.warn(
-            "⚠️ No se pudo iniciar la música."
-        );
-
-        startScreen.style.display = 'flex';
-
-        startScreen.classList.remove('hidden');
-
-        starting = false;
-
-        return;
-
-    }
+    starting = false;
 
 }
 
@@ -628,32 +290,15 @@ async function startExperience() {
    EVENTOS DEL BOTÓN DE INICIO
    ========================================================= */
 
-/*
- * Usamos click para computadora.
- */
-
 startScreen.addEventListener(
     'click',
     startExperience
 );
 
 
-/*
- * Usamos touchend para celulares.
- *
- * touchend es preferible aquí porque ocurre directamente
- * después del toque del usuario y permite desbloquear
- * correctamente el audio en navegadores móviles.
- */
-
 startScreen.addEventListener(
     'touchend',
     (event) => {
-
-        /*
-         * Evitar que el navegador produzca comportamientos
-         * secundarios.
-         */
 
         event.preventDefault();
 
@@ -883,7 +528,9 @@ function makeGlow(
         document.createElement('canvas');
 
 
-    c.width = c.height = size;
+    c.width =
+        c.height =
+        size;
 
 
     const g =
@@ -894,28 +541,28 @@ function makeGlow(
         g.createRadialGradient(
             size / 2,
             size / 2,
-            size * 0.05,
+            0,
             size / 2,
             size / 2,
-            size * 0.5
+            size / 2
         );
 
 
     grad.addColorStop(
         0,
-        `rgba(${c1},0.55)`
+        `rgba(${c1},0.95)`
     );
 
 
     grad.addColorStop(
-        0.5,
-        `rgba(${c2},0.25)`
+        0.35,
+        `rgba(${c2},0.55)`
     );
 
 
     grad.addColorStop(
         1,
-        'rgba(0,0,0,0)'
+        `rgba(${c2},0)`
     );
 
 
@@ -930,26 +577,37 @@ function makeGlow(
     );
 
 
-    return new THREE.CanvasTexture(c);
+    const tex =
+        new THREE.CanvasTexture(c);
+
+
+    const mat =
+        new THREE.SpriteMaterial({
+            map: tex,
+            transparent: true,
+            depthWrite: false,
+            blending: THREE.AdditiveBlending
+        });
+
+
+    const sp =
+        new THREE.Sprite(mat);
+
+
+    sp.scale.set(
+        size,
+        size,
+        1
+    );
+
+
+    return sp;
 
 }
 
 
 const glow =
-    new THREE.Sprite(
-        new THREE.SpriteMaterial({
-            map: makeGlow(),
-            transparent: true,
-            depthWrite: false
-        })
-    );
-
-
-glow.scale.set(
-    GLOW_BASE,
-    GLOW_BASE,
-    1
-);
+    makeGlow();
 
 
 scene.add(glow);
@@ -959,192 +617,34 @@ scene.add(glow);
    ANILLO
    ========================================================= */
 
-function ringTexture(
-    size = 1024
-) {
-
-    const c =
-        document.createElement('canvas');
+const ringGroup =
+    new THREE.Group();
 
 
-    c.width =
-        c.height =
-        size;
+scene.add(ringGroup);
 
 
-    const g =
-        c.getContext('2d');
-
-
-    g.translate(
-        size / 2,
-        size / 2
+const ringGeometry =
+    new THREE.RingGeometry(
+        75,
+        125,
+        128
     );
 
 
-    const rInner =
-        size * 0.205;
-
-
-    const rOuter =
-        size * 0.49;
-
-
-    const grd =
-        g.createRadialGradient(
-            0,
-            0,
-            rInner,
-            0,
-            0,
-            rOuter
-        );
-
-
-    grd.addColorStop(
-        0.00,
-        'rgba(255,255,245,1)'
-    );
-
-
-    grd.addColorStop(
-        0.30,
-        'rgba(255,235,120,1)'
-    );
-
-
-    grd.addColorStop(
-        0.65,
-        'rgba(255,200,40,0.95)'
-    );
-
-
-    grd.addColorStop(
-        1.00,
-        'rgba(255,160,0,0.85)'
-    );
-
-
-    g.fillStyle = grd;
-
-
-    g.beginPath();
-
-
-    g.arc(
-        0,
-        0,
-        rOuter,
-        0,
-        Math.PI * 2
-    );
-
-
-    g.arc(
-        0,
-        0,
-        rInner,
-        0,
-        Math.PI * 2,
-        true
-    );
-
-
-    g.closePath();
-
-
-    g.fill();
-
-
-    const bandCount = 26;
-
-
-    for (
-        let i = 0;
-        i < bandCount;
-        i++
-    ) {
-
-        const r =
-            rInner +
-            (
-                rOuter -
-                rInner
-            ) *
-            (
-                i /
-                (bandCount - 1)
-            );
-
-
-        const dark =
-            i % 3 === 0;
-
-
-        g.beginPath();
-
-
-        g.arc(
-            0,
-            0,
-            r,
-            0,
-            Math.PI * 2
-        );
-
-
-        g.lineWidth =
-            (
-                rOuter -
-                rInner
-            ) /
-            bandCount *
-            (
-                0.55 +
-                Math.random() * 0.35
-            );
-
-
-        g.strokeStyle =
-            dark
-                ? 'rgba(110,60,0,0.20)'
-                : 'rgba(255,255,225,0.16)';
-
-
-        g.stroke();
-
-    }
-
-
-    return new THREE.CanvasTexture(c);
-
-}
+const ringMaterial =
+    new THREE.MeshBasicMaterial({
+        color: 0xffd84d,
+        transparent: true,
+        opacity: 0.75,
+        side: THREE.DoubleSide
+    });
 
 
 const ring =
     new THREE.Mesh(
-
-        new THREE.RingGeometry(
-            42,
-            116,
-            160
-        ),
-
-        new THREE.MeshBasicMaterial({
-
-            map: ringTexture(),
-
-            transparent: true,
-
-            side: THREE.DoubleSide,
-
-            blending:
-                THREE.AdditiveBlending,
-
-            opacity: 1
-
-        })
-
+        ringGeometry,
+        ringMaterial
     );
 
 
@@ -1152,128 +652,12 @@ ring.rotation.x =
     Math.PI / 2;
 
 
-scene.add(ring);
+ringGroup.add(ring);
 
 
 /* =========================================================
    FRASES
    ========================================================= */
-
-const frasesBase =
-    (
-        Array.isArray(CONFIG.frases) &&
-        CONFIG.frases.length
-    )
-        ? CONFIG.frases
-        : ["🌻"];
-
-
-const WORD_SLOTS = 150;
-
-
-const WORDS =
-    Array.from(
-        {
-            length: WORD_SLOTS
-        },
-        (_, i) =>
-            frasesBase[
-                i % frasesBase.length
-            ]
-    );
-
-
-function makeTextTexture(
-    text,
-    color
-) {
-
-    const c =
-        document.createElement('canvas');
-
-
-    c.width = 512;
-
-    c.height = 128;
-
-
-    const ctx =
-        c.getContext('2d');
-
-
-    ctx.clearRect(
-        0,
-        0,
-        c.width,
-        c.height
-    );
-
-
-    ctx.textAlign = 'center';
-
-    ctx.textBaseline = 'middle';
-
-
-    ctx.fillStyle = '#fff';
-
-
-    ctx.shadowColor = color;
-
-    ctx.shadowBlur = 30;
-
-
-    const maxWidth =
-        c.width - 48;
-
-
-    let fontSize = 60;
-
-
-    ctx.font =
-        `${fontSize}px 'Indie Flower', cursive`;
-
-
-    while (
-        ctx.measureText(text).width >
-            maxWidth &&
-        fontSize > 24
-    ) {
-
-        fontSize -= 2;
-
-        ctx.font =
-            `${fontSize}px 'Indie Flower', cursive`;
-
-    }
-
-
-    ctx.fillText(
-        text,
-        c.width / 2,
-        c.height / 2
-    );
-
-
-    return new THREE.CanvasTexture(c);
-
-}
-
-
-const COLORS = [
-
-    '#ffd700',
-    '#ffe066',
-    '#ffcc33',
-    '#ffb347',
-    '#fff2b0',
-    '#ffaa00',
-    '#f4c430',
-    '#e6b800',
-    '#ffdb58',
-    '#f0c419'
-
-];
-
 
 const textGroup =
     new THREE.Group();
@@ -1282,98 +666,160 @@ const textGroup =
 scene.add(textGroup);
 
 
-document
-    .fonts
-    .load("40px 'Indie Flower'")
-    .catch(() => {})
-    .then(() => {
+function makeTextSprite(
+    message
+) {
 
-        for (
-            let i = 0;
-            i < WORDS.length;
-            i++
-        ) {
-
-            const tex =
-                makeTextTexture(
-                    WORDS[i],
-                    COLORS[
-                        i % COLORS.length
-                    ]
-                );
+    const canvas =
+        document.createElement('canvas');
 
 
-            const mat =
-                new THREE.SpriteMaterial({
-                    map: tex,
-                    transparent: true
-                });
+    const ctx =
+        canvas.getContext('2d');
 
 
-            const sp =
-                new THREE.Sprite(mat);
+    const fontSize = 38;
+
+    ctx.font =
+        `${fontSize}px Arial`;
 
 
-            sp.scale.set(
-                68,
-                21.8,
-                1
+    const width =
+        ctx.measureText(message).width +
+        40;
+
+
+    canvas.width =
+        width;
+
+
+    canvas.height =
+        70;
+
+
+    ctx.font =
+        `${fontSize}px Arial`;
+
+
+    ctx.textAlign =
+        'center';
+
+
+    ctx.textBaseline =
+        'middle';
+
+
+    ctx.fillStyle =
+        'rgba(255,245,190,0.95)';
+
+
+    ctx.shadowColor =
+        'rgba(255,190,0,0.8)';
+
+
+    ctx.shadowBlur =
+        10;
+
+
+    ctx.fillText(
+        message,
+        width / 2,
+        35
+    );
+
+
+    const texture =
+        new THREE.CanvasTexture(
+            canvas
+        );
+
+
+    texture.needsUpdate = true;
+
+
+    const material =
+        new THREE.SpriteMaterial({
+            map: texture,
+            transparent: true,
+            depthWrite: false
+        });
+
+
+    const sprite =
+        new THREE.Sprite(material);
+
+
+    sprite.scale.set(
+        width * 0.12,
+        8,
+        1
+    );
+
+
+    return sprite;
+
+}
+
+
+CONFIG.frases.forEach(
+    (frase) => {
+
+        const sp =
+            makeTextSprite(frase);
+
+
+        const phi =
+            Math.acos(
+                2 * Math.random() - 1
             );
 
 
-            const phi =
-                Math.acos(
-                    2 * Math.random() - 1
-                );
+        const theta =
+            Math.random() *
+            Math.PI *
+            2;
 
 
-            const theta =
-                Math.random() *
-                Math.PI *
-                2;
+        const r =
+            150 +
+            Math.random() * 180;
 
 
-            const r =
-                150 +
-                Math.random() * 120;
+        sp.position.set(
+
+            r *
+            Math.sin(phi) *
+            Math.cos(theta),
+
+            r *
+            Math.cos(phi),
+
+            r *
+            Math.sin(phi) *
+            Math.sin(theta)
+
+        );
 
 
-            sp.position.set(
+        sp.userData = {
 
-                r *
-                Math.sin(phi) *
-                Math.cos(theta),
+            phi,
 
-                r *
-                Math.cos(phi),
+            theta,
 
-                r *
-                Math.sin(phi) *
-                Math.sin(theta)
+            radius: r,
 
-            );
+            speed:
+                0.001 +
+                Math.random() * 0.001
 
-
-            sp.userData = {
-
-                phi,
-
-                theta,
-
-                radius: r,
-
-                speed:
-                    0.001 +
-                    Math.random() * 0.001
-
-            };
+        };
 
 
-            textGroup.add(sp);
+        textGroup.add(sp);
 
-        }
-
-    });
+    }
+);
 
 
 /* =========================================================
@@ -1469,6 +915,7 @@ function makePhotoSprite(
             ) / 2,
 
             img.width * s,
+
             img.height * s
 
         );
