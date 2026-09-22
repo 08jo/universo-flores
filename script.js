@@ -467,8 +467,11 @@ async function playFromElement() {
         audio.currentTime = 0;
 
 
-        const promise = audio.play();
+        /* =====================================================
+           AUDIO.PLAY()
+           ===================================================== */
 
+        const promise = audio.play();
 
         if (promise &&
             typeof promise.then === 'function') {
@@ -1466,7 +1469,6 @@ function makePhotoSprite(
             ) / 2,
 
             img.width * s,
-
             img.height * s
 
         );
