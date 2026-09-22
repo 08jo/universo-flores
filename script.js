@@ -4,14 +4,13 @@
    - 150 frases flotando en esfera 3D
    - Estrellas de fondo
    - Control: arrastrar, rueda, pellizco
-   - Audio con precarga mejorada para móvil
+   - Audio con precarga agresiva y robusta (móvil-first)
    ========================================================= */
 
 /* ---------- CONFIGURACIÓN ---------- */
 const CONFIG = {
     titulo: "Un universo hecho para ti 🌻",
     frases: [
-        // --- Originales ---
         "🌻 Eres de esas personas que dejan huella",
         "🌻 Tienes algo especial que se nota",
         "🌻 Brillas sin darte cuenta",
@@ -58,68 +57,117 @@ const CONFIG = {
 /* ---------- TÍTULO ---------- */
 document.getElementById('main-title').textContent = CONFIG.titulo;
 
-/* ---------- AUDIO CON PRECARGA MEJORADA ---------- */
+/* =========================================================
+   AUDIO — CARGA PRIORITARIA Y ROBUSTA
+   ========================================================= */
+const VOLUMEN_FINAL = 0.5;
 const audio = document.getElementById('audio');
+const startButton = document.getElementById('start-button');
+
+/* 1) Inyectar <link rel=preload> en <head> para que el navegador
+      empiece a bajar el mp3 antes de que el JS termine de parsear. */
+(function preloadLink() {
+    try {
+        const link = document.createElement('link');
+        link.rel = 'preload';
+        link.as = 'audio';
+        link.href = CONFIG.musica;
+        link.type = 'audio/mpeg';
+        link.crossOrigin = 'anonymous';
+        document.head.appendChild(link);
+    } catch (e) {}
+})();
+
+/* 2) Configurar el elemento <audio> de forma agresiva */
 audio.querySelector('source').src = CONFIG.musica;
 audio.preload = 'auto';
+audio.autoplay = false;
 audio.setAttribute('playsinline', '');
 audio.setAttribute('webkit-playsinline', '');
+audio.setAttribute('crossorigin', 'anonymous');
 audio.load();
 
-/* Forzar descarga completa en segundo plano */
-fetch(CONFIG.musica).catch(() => {});
+/* 3) Forzar descarga completa en background con cache forzada.
+      No bloquea nada, pero llena el buffer del navegador. */
+(function warmCache() {
+    try {
+        fetch(CONFIG.musica, { cache: 'force-cache', mode: 'cors' })
+            .then(r => r.blob())
+            .catch(() => {});
+    } catch (e) {}
+})();
 
-const startButton = document.getElementById('start-button');
-const VOLUMEN_FINAL = 0.5;   // 0.3 suave, 0.5 medio, 0.8 fuerte
+/* 4) Estado del botón */
 let audioReady = false;
 
-/* Mientras carga: "Preparando..." */
-startButton.textContent = 'Preparando...';
-startButton.classList.add('loading');
-
-/* Cuando el navegador tiene suficiente audio listo */
-audio.addEventListener('canplaythrough', () => {
+function markReady(text) {
     if (audioReady) return;
     audioReady = true;
-    startButton.textContent = 'Toca para entrar';
+    startButton.textContent = text || 'Toca para entrar';
     startButton.classList.remove('loading');
     startButton.classList.add('ready');
+}
+
+/* 5) Detección temprana: cualquiera de estos eventos habilita el botón */
+['loadedmetadata', 'canplay', 'canplaythrough'].forEach(evt => {
+    audio.addEventListener(evt, () => markReady(), { once: true });
 });
 
-/* Fallback: si después de 5s no cargó, permitir tocar igual */
-setTimeout(() => {
-    if (!audioReady) {
-        audioReady = true;
-        startButton.textContent = 'Toca para entrar';
-        startButton.classList.remove('loading');
-        startButton.classList.add('ready');
-    }
-}, 5000);
+/* 6) Fallback: 2.5s máximo esperando; si no, habilitar igual */
+setTimeout(() => markReady(), 2500);
 
-/* Truco mejorado para móvil: preparar el audio silenciosamente */
+/* 7) Desbloqueo de audio en móvil (iOS/Android) */
+let audioUnlocked = false;
+let audioCtx = null;
+
+function unlockAudio() {
+    if (audioUnlocked) return;
+    audioUnlocked = true;
+    try {
+        // Truco AudioContext: desbloquea la política de autoplay
+        const AC = window.AudioContext || window.webkitAudioContext;
+        if (AC) {
+            audioCtx = new AC();
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            const buf = audioCtx.createBuffer(1, 1, 22050);
+            const src = audioCtx.createBufferSource();
+            src.buffer = buf;
+            src.connect(audioCtx.destination);
+            src.start(0);
+        }
+    } catch (e) {}
+
+    audio.muted = false;
+    audio.volume = VOLUMEN_FINAL;
+
+    const p = audio.play();
+    if (p && typeof p.then === 'function') {
+        p.catch(() => {
+            // Reintento silencioso: a veces hay que esperar al siguiente frame
+            setTimeout(() => {
+                audio.play().catch(() => {});
+            }, 80);
+        });
+    }
+}
+
+document.addEventListener('touchstart', unlockAudio, { once: true, passive: true });
+document.addEventListener('click',      unlockAudio, { once: true });
+document.addEventListener('keydown',    unlockAudio, { once: true });
+
+/* 8) Intento temprano silencioso (algunos móviles lo permiten) */
 audio.volume = 0;
 audio.muted = true;
-
-const unlockAudio = () => {
-    audio.muted = false;
-    audio.volume = VOLUMEN_FINAL;
-    audio.play().catch(() => {});
-};
-
-/* Intento 1: reproducir silenciado al cargar (funciona en algunos móviles) */
 audio.play().then(() => {
+    // Se pudo pre-reproducir: paramos y dejamos listo para el gesto real
     audio.pause();
     audio.currentTime = 0;
-    audio.volume = VOLUMEN_FINAL;
     audio.muted = false;
+    audio.volume = VOLUMEN_FINAL;
 }).catch(() => {
-    audio.volume = VOLUMEN_FINAL;
     audio.muted = false;
+    audio.volume = VOLUMEN_FINAL;
 });
-
-/* Intento 2: desbloquear al primer toque en CUALQUIER parte de la pantalla */
-document.addEventListener('touchstart', unlockAudio, { once: true, passive: true });
-document.addEventListener('click', unlockAudio, { once: true });
 
 /* ---------- ESCENA ---------- */
 const canvas   = document.getElementById('c');
@@ -462,9 +510,17 @@ function startExperience() {
     startScreen.classList.add('hidden');
     setTimeout(() => { startScreen.style.display = 'none'; }, 900);
 
-    audio.muted = false;
-    audio.volume = VOLUMEN_FINAL;
-    audio.play().catch(() => {});
+    // Asegurar desbloqueo y reproducción inmediata
+    unlockAudio();
+
+    // Reintento por si el buffer no estaba listo
+    const tryPlay = () => {
+        const p = audio.play();
+        if (p && typeof p.then === 'function') {
+            p.catch(() => setTimeout(tryPlay, 120));
+        }
+    };
+    tryPlay();
 }
 
 startScreen.addEventListener('click', startExperience);
